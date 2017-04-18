@@ -24,12 +24,6 @@ BLEFloatCharacteristic gyroZChar("BBB3", BLERead | BLENotify);
 BLEFloatCharacteristic acclXChar("BBB4", BLERead | BLENotify);
 BLEFloatCharacteristic acclYChar("BBB5", BLERead | BLENotify);
 BLEFloatCharacteristic acclZChar("BBB6", BLERead | BLENotify);
-BLEFloatCharacteristic posXChar("BBB7", BLERead | BLENotify);
-BLEFloatCharacteristic posYChar("BBB8", BLERead | BLENotify);
-BLEFloatCharacteristic posZChar("BBB9", BLERead | BLENotify);
-BLEFloatCharacteristic speedXChar("BBBA", BLERead | BLENotify);
-BLEFloatCharacteristic speedYChar("BBBB", BLERead | BLENotify);
-BLEFloatCharacteristic speedZChar("BBBC", BLERead | BLENotify);
 
 BLEDescriptor gyroXDescriptor = BLEDescriptor("2901", "gyroX");
 BLEDescriptor gyroYDescriptor = BLEDescriptor("2901", "gyroY");
@@ -71,6 +65,18 @@ void loop() {
 
   CurieIMU.readGyroScaled(g[AXIS_X][index], g[AXIS_Y][index], g[AXIS_Z][index]);
   CurieIMU.readAccelerometerScaled(a[AXIS_X][index], a[AXIS_Y][index], a[AXIS_Z][index]);
+
+  for(int axis = 0; axis < 3; axis++) {  
+    if(!isInitialized) {
+      avg_a[axis][0] = filter(a[axis], index + 1);
+      if(index == AVERAGE - 1) {
+        if(axis == AXIS_Z) isInitialized = true;
+      }
+      else {
+        avg_a[axis][0] = filter(a[axis], AVERAGE);
+      } 
+    }
+  }
 
   movetime[1] = millis();
   millisec = movetime[1] - movetime[0];
