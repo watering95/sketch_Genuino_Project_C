@@ -2,7 +2,6 @@
 #include "CurieIMU.h"
 
 #define AVERAGE 5
-#define MOVERANGE 0.1
 #define AXIS_X  0
 #define AXIS_Y  1
 #define AXIS_Z  2
@@ -14,8 +13,6 @@
 #define MOTOR_RIGHT 11  //H-Bridge M1
 #define MOTOR_LEFT 3    //H-Bridge M2
 
-#define SPEED 255
-
 BLEPeripheral blePeripheral;
 BLEService genuinoService("BBB0");
 BLEFloatCharacteristic gyroXChar("BBB1", BLERead | BLENotify);
@@ -25,6 +22,9 @@ BLEFloatCharacteristic acclXChar("BBB4", BLERead | BLENotify);
 BLEFloatCharacteristic acclYChar("BBB5", BLERead | BLENotify);
 BLEFloatCharacteristic acclZChar("BBB6", BLERead | BLENotify);
 
+BLEIntCharacteristic directionCharacteristic("BBB7", BLEWrite | BLERead | BLENotify);
+BLEIntCharacteristic speedCharacteristic("BBB7", BLEWrite | BLERead | BLENotify);
+
 BLEDescriptor gyroXDescriptor = BLEDescriptor("2901", "gyroX");
 BLEDescriptor gyroYDescriptor = BLEDescriptor("2901", "gyroY");
 BLEDescriptor gyroZDescriptor = BLEDescriptor("2901", "gyroZ");
@@ -32,10 +32,15 @@ BLEDescriptor acclXDescriptor = BLEDescriptor("2901", "acclX");
 BLEDescriptor acclYDescriptor = BLEDescriptor("2901", "acclY");
 BLEDescriptor acclZDescriptor = BLEDescriptor("2901", "acclZ");
 
+BLEDescriptor directionDescriptor = BLEDescriptor("2901", "Direction");
+BLEDescriptor speedDescriptor = BLEDescriptor("2901", "Speed");
+
 unsigned long movetime[2] = {0, 0};
 float init_a[3], g[3][AVERAGE], a[3][AVERAGE];
 float avg_g[3][2], avg_a[3][2];
 boolean isInitialized = false;
+unsigned int motorDirection = 0;
+unsigned int motorSpeed = 0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -61,6 +66,31 @@ void loop() {
     delay(100);
   } else {
     central = blePeripheral.central();
+  }
+
+  if(central.connected()) {
+    if(speedCharacteristic.written()) motorSpeed = speedCharacteristic.value();
+    if(directionCharacteristic.written()) motorDirection = directionCharacteristic.value();
+    switch(motorDirection) {
+        case 0:
+          motorStop();
+          break;
+        case 1:
+          motorRun(motorSpeed);
+          break;
+        case 2:
+          motorRight(motorSpeed);
+          break;
+        case 3:
+          motorLeft(motorSpeed);
+          break;
+        case 4:
+          motorBack(motorSpeed);
+          break;   
+        default:
+          motorStop();
+          break;
+    }
   }
 
   CurieIMU.readGyroScaled(g[AXIS_X][index], g[AXIS_Y][index], g[AXIS_Z][index]);
@@ -101,7 +131,7 @@ void initMotorShield() {
   pinMode(MOTOR_LEFT, OUTPUT);
 }
 
-void motorRun(int v) {
+void motorRun(unsigned int v) {
   byte dir = 0x05;  //  0 0 0 0 0 1 0 1
   changeDirection(dir);
   analogWrite(MOTOR_RIGHT, v);
@@ -114,21 +144,21 @@ void motorStop() {
   analogWrite(MOTOR_LEFT, 0);
 }
 
-void motorBack(int v) {
+void motorBack(unsigned int v) {
   byte dir = 0x0A;  //  0 0 0 0 1 0 1 0
   changeDirection(dir);
   analogWrite(MOTOR_RIGHT, v);
   analogWrite(MOTOR_LEFT, v);
 }
 
-void motorLeft(int v) {
+void motorLeft(unsigned int v) {
   byte dir = 0x04;  //  0 0 0 0 0 1 0 0
   changeDirection(dir);
   analogWrite(MOTOR_LEFT, v);
   analogWrite(MOTOR_RIGHT, 0);
 }
 
-void motorRight(int v) {
+void motorRight(unsigned int v) {
   byte dir = 0x01;  //  0 0 0 0 0 0 0 1
   changeDirection(dir);
   analogWrite(MOTOR_LEFT, 0);
@@ -173,10 +203,14 @@ void initBLE() {
   blePeripheral.addAttribute(acclYDescriptor);
   blePeripheral.addAttribute(acclZChar);
   blePeripheral.addAttribute(acclZDescriptor);
+  blePeripheral.addAttribute(directionCharacteristic);
+  blePeripheral.addAttribute(directionDescriptor);
 
   gyroXChar.setValue(0);  gyroYChar.setValue(0);  gyroZChar.setValue(0);
   acclXChar.setValue(0);  acclYChar.setValue(0);  acclZChar.setValue(0);
-
+  
+  directionCharacteristic.setValue(0);
+  
   blePeripheral.begin();
   Serial.println("BLE Genuino101 Peripheral");
 }
