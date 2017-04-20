@@ -218,6 +218,7 @@ void blePeripheralDisconnectHandler(BLECentral& central) {
 void speedCharacteristicWritten(BLECentral& central, BLECharacteristic& characteristic) {
   Serial.print("speedCharacteristic event, written : ");
   motorSpeed = speedCharacteristic.value();
+  Serial.println(motorSpeed);
 
   changeRunState();
 }
