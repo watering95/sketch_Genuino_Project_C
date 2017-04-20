@@ -45,6 +45,7 @@ unsigned long movetime[2] = {0, 0};
 float init_a[3], g[3][AVERAGE], a[3][AVERAGE];
 float avg_g[3][2], avg_a[3][2];
 boolean isInitialized = false;
+boolean isConnectedCentral = false;
 unsigned int motorDirection = 0;
 unsigned int motorSpeed = 0;
 
@@ -58,55 +59,11 @@ void setup() {
 
 void loop() {
   static int index = 0;
-  static boolean isPrint = false;
   unsigned long millisec = 0;
   float sec;
 
   // put your main code here, to run repeatedly:
-  BLECentral central = blePeripheral.central();
-
-  if (central && !isPrint) {
-    Serial.print("Connected to central: ");
-    Serial.println(central.address());
-    isPrint = true;
-    delay(100);
-  } else {
-    central = blePeripheral.central();
-  }
-
-  if(central.connected()) {
-    if(speedCharacteristic.written()) {
-      motorSpeed = speedCharacteristic.value();
-      Serial.print("Speed : ");
-      Serial.println(motorSpeed);
-    }
-    if(directionCharacteristic.written()) {
-      motorDirection = directionCharacteristic.value();
-      Serial.print("Direction : ");
-      Serial.println(motorDirection);
-    }
-    
-    switch(motorDirection) {
-        case MACHINE_STOP:
-          motorStop();
-          break;
-        case MACHINE_FORWARD:
-          motorRun(motorSpeed);
-          break;
-        case MACHINE_RIGHT:
-          motorRight(motorSpeed);
-          break;
-        case MACHINE_LEFT:
-          motorLeft(motorSpeed);
-          break;
-        case MACHINE_BACKWARD:
-          motorBack(motorSpeed);
-          break;   
-        default:
-          motorStop();
-          break;
-    }
-  }
+  blePeripheral.poll();
 
   CurieIMU.readGyroScaled(g[AXIS_X][index], g[AXIS_Y][index], g[AXIS_Z][index]);
   CurieIMU.readAccelerometerScaled(a[AXIS_X][index], a[AXIS_Y][index], a[AXIS_Z][index]);
@@ -127,9 +84,7 @@ void loop() {
   millisec = movetime[1] - movetime[0];
   sec = millisec / 1000.0;
 
-  if (central.connected()) {
-    sendBLE(index);
-  } else isPrint = false;
+  if (isConnectedCentral) sendBLE(index);
 
   if (index < AVERAGE - 1) index++;
   else index = 0;
@@ -223,8 +178,17 @@ void initBLE() {
   blePeripheral.addAttribute(speedCharacteristic);
   blePeripheral.addAttribute(speedDescriptor);
 
+  blePeripheral.setEventHandler(BLEConnected, blePeripheralConnectHandler);
+  blePeripheral.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
+
+  directionCharacteristic.setEventHandler(BLEWritten, directionCharacteristicWritten);
+  speedCharacteristic.setEventHandler(BLEWritten, speedCharacteristicWritten);
+
   gyroXChar.setValue(0);  gyroYChar.setValue(0);  gyroZChar.setValue(0);
   acclXChar.setValue(0);  acclYChar.setValue(0);  acclZChar.setValue(0);
+
+  directionCharacteristic.setValue(0);
+  speedCharacteristic.setValue(0);
   
   blePeripheral.begin();
   Serial.println("BLE Genuino101 Peripheral");
@@ -237,6 +201,56 @@ void sendBLE(int index) {
   acclXChar.setValue(a[AXIS_X][index]);
   acclYChar.setValue(a[AXIS_Y][index]);
   acclZChar.setValue(a[AXIS_Z][index]);
+}
+
+void blePeripheralConnectHandler(BLECentral& central) {
+  Serial.print("Connected event, central : ");
+  Serial.println(central.address());
+  isConnectedCentral = true;
+}
+
+void blePeripheralDisconnectHandler(BLECentral& central) {
+  Serial.print("Disconnected event, central : ");
+  Serial.println(central.address());
+  isConnectedCentral = false;
+}
+
+void speedCharacteristicWritten(BLECentral& central, BLECharacteristic& characteristic) {
+  Serial.print("speedCharacteristic event, written : ");
+  motorSpeed = speedCharacteristic.value();
+
+  changeRunState();
+}
+
+void directionCharacteristicWritten(BLECentral& central, BLECharacteristic& characteristic) {
+  Serial.print("directionCharacteristic event, written : ");
+  motorDirection = directionCharacteristic.value();
+  Serial.println(motorDirection);  
+      
+  changeRunState();
+}
+
+void changeRunState() {
+  switch(motorDirection) {
+    case MACHINE_STOP:
+      motorStop();
+      break;
+    case MACHINE_FORWARD:
+      motorRun(motorSpeed);
+      break;
+    case MACHINE_RIGHT:
+      motorRight(motorSpeed);
+      break;
+    case MACHINE_LEFT:
+      motorLeft(motorSpeed);
+      break;
+    case MACHINE_BACKWARD:
+      motorBack(motorSpeed);
+      break;   
+    default:
+      motorStop();
+      break;
+    }  
 }
 
 float Integration(float base, float diff0, float diff1, float t) {
@@ -254,4 +268,3 @@ float filter(float raw[], int num) {
 
   return result / num;
 }
-
