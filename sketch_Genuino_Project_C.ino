@@ -13,6 +13,12 @@
 #define MOTOR_RIGHT 11  //H-Bridge M1
 #define MOTOR_LEFT 3    //H-Bridge M2
 
+#define MACHINE_FORWARD 1
+#define MACHINE_BACKWARD  4
+#define MACHINE_LEFT  3
+#define MACHINE_RIGHT 2
+#define MACHINE_STOP  0
+
 BLEPeripheral blePeripheral;
 BLEService genuinoService("BBB0");
 BLEFloatCharacteristic gyroXChar("BBB1", BLERead | BLENotify);
@@ -22,8 +28,8 @@ BLEFloatCharacteristic acclXChar("BBB4", BLERead | BLENotify);
 BLEFloatCharacteristic acclYChar("BBB5", BLERead | BLENotify);
 BLEFloatCharacteristic acclZChar("BBB6", BLERead | BLENotify);
 
-BLEIntCharacteristic directionCharacteristic("BBB7", BLEWrite | BLERead | BLENotify);
-BLEIntCharacteristic speedCharacteristic("BBB7", BLEWrite | BLERead | BLENotify);
+BLEIntCharacteristic directionCharacteristic("BBB7", BLERead | BLEWrite);
+BLEIntCharacteristic speedCharacteristic("BBB8", BLERead | BLEWrite);
 
 BLEDescriptor gyroXDescriptor = BLEDescriptor("2901", "gyroX");
 BLEDescriptor gyroYDescriptor = BLEDescriptor("2901", "gyroY");
@@ -44,7 +50,7 @@ unsigned int motorSpeed = 0;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(19200);
   initIMU();
   initBLE();
   initMotorShield();
@@ -69,22 +75,31 @@ void loop() {
   }
 
   if(central.connected()) {
-    if(speedCharacteristic.written()) motorSpeed = speedCharacteristic.value();
-    if(directionCharacteristic.written()) motorDirection = directionCharacteristic.value();
+    if(speedCharacteristic.written()) {
+      motorSpeed = speedCharacteristic.value();
+      Serial.print("Speed : ");
+      Serial.println(motorSpeed);
+    }
+    if(directionCharacteristic.written()) {
+      motorDirection = directionCharacteristic.value();
+      Serial.print("Direction : ");
+      Serial.println(motorDirection);
+    }
+    
     switch(motorDirection) {
-        case 0:
+        case MACHINE_STOP:
           motorStop();
           break;
-        case 1:
+        case MACHINE_FORWARD:
           motorRun(motorSpeed);
           break;
-        case 2:
+        case MACHINE_RIGHT:
           motorRight(motorSpeed);
           break;
-        case 3:
+        case MACHINE_LEFT:
           motorLeft(motorSpeed);
           break;
-        case 4:
+        case MACHINE_BACKWARD:
           motorBack(motorSpeed);
           break;   
         default:
@@ -205,11 +220,11 @@ void initBLE() {
   blePeripheral.addAttribute(acclZDescriptor);
   blePeripheral.addAttribute(directionCharacteristic);
   blePeripheral.addAttribute(directionDescriptor);
+  blePeripheral.addAttribute(speedCharacteristic);
+  blePeripheral.addAttribute(speedDescriptor);
 
   gyroXChar.setValue(0);  gyroYChar.setValue(0);  gyroZChar.setValue(0);
   acclXChar.setValue(0);  acclYChar.setValue(0);  acclZChar.setValue(0);
-  
-  directionCharacteristic.setValue(0);
   
   blePeripheral.begin();
   Serial.println("BLE Genuino101 Peripheral");
