@@ -1,271 +1,324 @@
 #include <CurieBLE.h>
 #include "CurieIMU.h"
 
-#define AVERAGE 5
-#define AXIS_X  0
-#define AXIS_Y  1
-#define AXIS_Z  2
+#define SHIELD_V1
 
+#ifdef SHIELD_V2
+#include <Adafruit_MotorShield.h>
+Adafruit_MotorShield AFMS = Adafruit_MotorShield();
+
+Adafruit_DCMotor *motor1 = AFMS.getMotor(3);
+Adafruit_DCMotor *motor2 = AFMS.getMotor(4);
+#else
 #define PIN_DATA 8
 #define PIN_CLOCK 4
 #define PIN_LATCH 12
+#endif
 
+#ifdef SHIELD_V1
+#define MOTOR_RIGHT 5  //H-Bridge M4
+#define MOTOR_LEFT  6    //H-Bridge M3
+#define MOTOR_ENABLE  7
+#else
 #define MOTOR_RIGHT 11  //H-Bridge M1
 #define MOTOR_LEFT 3    //H-Bridge M2
+#endif
 
-#define MACHINE_FORWARD 1
-#define MACHINE_BACKWARD  4
-#define MACHINE_LEFT  3
-#define MACHINE_RIGHT 2
-#define MACHINE_STOP  0
+#define MOTOR_FORWARD 1
+#define MOTOR_BACKWARD  4
+#define MOTOR_LEFTTURN  3
+#define MOTOR_RIGHTTURN 2
+#define MOTOR_STOP  0
 
-BLEPeripheral blePeripheral;
-BLEService genuinoService("BBB0");
-BLEFloatCharacteristic gyroXChar("BBB1", BLERead | BLENotify);
-BLEFloatCharacteristic gyroYChar("BBB2", BLERead | BLENotify);
-BLEFloatCharacteristic gyroZChar("BBB3", BLERead | BLENotify);
-BLEFloatCharacteristic acclXChar("BBB4", BLERead | BLENotify);
-BLEFloatCharacteristic acclYChar("BBB5", BLERead | BLENotify);
-BLEFloatCharacteristic acclZChar("BBB6", BLERead | BLENotify);
+BLEService machineService("BBB0");
+BLECharacteristic machineStateChara("BBB1", BLERead | BLENotify, 30);
 
-BLEIntCharacteristic directionCharacteristic("BBB7", BLERead | BLEWrite);
-BLEIntCharacteristic speedCharacteristic("BBB8", BLERead | BLEWrite);
+BLEService motorService("0174");
+BLEIntCharacteristic directionChara("0175", BLEWrite);
+BLEIntCharacteristic speedLeftChara("0176", BLEWrite);
+BLEIntCharacteristic speedRightChara("0177", BLEWrite);
 
-BLEDescriptor gyroXDescriptor = BLEDescriptor("2901", "gyroX");
-BLEDescriptor gyroYDescriptor = BLEDescriptor("2901", "gyroY");
-BLEDescriptor gyroZDescriptor = BLEDescriptor("2901", "gyroZ");
-BLEDescriptor acclXDescriptor = BLEDescriptor("2901", "acclX");
-BLEDescriptor acclYDescriptor = BLEDescriptor("2901", "acclY");
-BLEDescriptor acclZDescriptor = BLEDescriptor("2901", "acclZ");
-
-BLEDescriptor directionDescriptor = BLEDescriptor("2901", "Direction");
-BLEDescriptor speedDescriptor = BLEDescriptor("2901", "Speed");
-
-unsigned long movetime[2] = {0, 0};
-float init_a[3], g[3][AVERAGE], a[3][AVERAGE];
-float avg_g[3][2], avg_a[3][2];
-boolean isInitialized = false;
 boolean isConnectedCentral = false;
 unsigned int motorDirection = 0;
-unsigned int motorSpeed = 0;
+unsigned int motorLeftSpeed = 0;
+unsigned int motorRightSpeed = 0;
+unsigned int motorState = MOTOR_STOP;
+char machineState[30];
+
+float gx, gy, gz, ax, ay, az;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(19200);
-  initIMU();
+  Serial.begin(9600);
   initBLE();
   initMotorShield();
+  initIMU();
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
-  static int index = 0;
-  unsigned long millisec = 0;
-  float sec;
-
   // put your main code here, to run repeatedly:
-  blePeripheral.poll();
+  BLE.poll();
 
-  CurieIMU.readGyroScaled(g[AXIS_X][index], g[AXIS_Y][index], g[AXIS_Z][index]);
-  CurieIMU.readAccelerometerScaled(a[AXIS_X][index], a[AXIS_Y][index], a[AXIS_Z][index]);
+  CurieIMU.readGyroScaled(gx, gy, gz);
+  CurieIMU.readAccelerometerScaled(ax, ay, az);
 
-  for(int axis = 0; axis < 3; axis++) {  
-    if(!isInitialized) {
-      avg_a[axis][0] = filter(a[axis], index + 1);
-      if(index == AVERAGE - 1) {
-        if(axis == AXIS_Z) isInitialized = true;
-      }
-      else {
-        avg_a[axis][0] = filter(a[axis], AVERAGE);
-      } 
-    }
+  if(isConnectedCentral) {  
+    sendBLE();
+    delay(1000);
   }
-
-  movetime[1] = millis();
-  millisec = movetime[1] - movetime[0];
-  sec = millisec / 1000.0;
-
-  if (isConnectedCentral) sendBLE(index);
-
-  if (index < AVERAGE - 1) index++;
-  else index = 0;
-
-  movetime[0] = movetime[1];
 }
 
 void initMotorShield() {
+#ifdef SHIELD_V2  
+  AFMS.begin();
+  motor1->run(RELEASE);
+  motor2->run(RELEASE);
+  Serial.println("Init Motor Shield V2);
+#else
+#ifdef SHIELD_V1
+  pinMode(MOTOR_ENABLE, OUTPUT);
+  digitalWrite(MOTOR_ENABLE, LOW);
+#endif
   pinMode(PIN_DATA, OUTPUT);
   pinMode(PIN_CLOCK, OUTPUT);
   pinMode(PIN_LATCH, OUTPUT);
 
   pinMode(MOTOR_RIGHT, OUTPUT);
   pinMode(MOTOR_LEFT, OUTPUT);
+  Serial.println("Init Motor Shield V1");
+#endif
 }
 
-void motorRun(unsigned int v) {
-  byte dir = 0x05;  //  0 0 0 0 0 1 0 1
+void motorBack(unsigned int vl, unsigned int vr) {  
+#ifdef SHIELD_V2
+  motor1->run(BACKWARD);
+  motor2->run(BACKWARD);
+  motor1->setSpeed(vl);
+  motor2->setSpeed(vr);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x81;  //  1 0 0 0 0 0 0 1
+#else
+  byte dir = 0x0A;  //  0 0 0 0 0 1 0 1
+#endif  
+  digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_RIGHT, v);
-  analogWrite(MOTOR_LEFT, v);
+  analogWrite(MOTOR_RIGHT, vr);
+  analogWrite(MOTOR_LEFT, vl);
+  Serial.print("Motor Run : ");
+  Serial.println(dir);
+#endif
+  motorState = MOTOR_BACKWARD;
 }
 
 void motorStop() {
-  byte dir = 0x05;  //  0 0 0 0 0 1 0 1
+#ifdef SHIELD_V2
+  motor1->run(RELEASE);
+  motor2->run(RELEASE);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x81;  //  1 0 0 0 0 0 0 1
+#else
+  byte dir = 0x0A;  //  0 0 0 0 0 1 0 1
+#endif
+  digitalWrite(LED_BUILTIN, LOW);  
   analogWrite(MOTOR_RIGHT, 0);
   analogWrite(MOTOR_LEFT, 0);
+  Serial.print("Motor Stop : ");
+  Serial.println(dir);
+#endif
+  motorState = MOTOR_STOP;
 }
 
-void motorBack(unsigned int v) {
-  byte dir = 0x0A;  //  0 0 0 0 1 0 1 0
+void motorRun(unsigned int vl, unsigned int vr) {
+#ifdef SHIELD_V2
+  motor1->setSpeed(vl);
+  motor2->setSpeed(vr);
+  motor1->run(FORWARD);
+  motor2->run(FORWARD);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
+#else
+  byte dir = 0x05;  //  0 0 0 0 1 0 1 0
+#endif
+  digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_RIGHT, v);
-  analogWrite(MOTOR_LEFT, v);
+  analogWrite(MOTOR_RIGHT, vr);
+  analogWrite(MOTOR_LEFT, vl);
+  Serial.print("Motor Back : ");
+  Serial.println(dir);
+#endif
+  motorState = MOTOR_FORWARD;
 }
 
-void motorLeft(unsigned int v) {
-  byte dir = 0x04;  //  0 0 0 0 0 1 0 0
+void motorLeft(unsigned int vl, unsigned int vr) {
+#ifdef SHIELD_V2
+  motor1->setSpeed(vl);
+  motor2->setSpeed(vr);
+  motor1->run(BACKWARD);
+  motor2->run(RELEASE);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
+#else
+  byte dir = 0x0A;  //  0 0 0 0 0 1 0 0
+#endif
+  digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, v);
+  analogWrite(MOTOR_LEFT, vl);
   analogWrite(MOTOR_RIGHT, 0);
+  Serial.print("Motor Left : ");
+  Serial.println(dir);
+#endif
+  motorState = MOTOR_LEFTTURN;
 }
 
-void motorRight(unsigned int v) {
-  byte dir = 0x01;  //  0 0 0 0 0 0 0 1
+void motorRight(unsigned int vl, unsigned int vr) {
+#ifdef SHIELD_V2
+  motor1->setSpeed(vl);
+  motor2->setSpeed(vr);
+  motor1->run(RELEASE);
+  motor2->run(BACKWARD);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
+#else
+  byte dir = 0x0A;  //  0 0 0 0 0 0 0 1
+#endif
+  digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
   analogWrite(MOTOR_LEFT, 0);
-  analogWrite(MOTOR_RIGHT, v);
+  analogWrite(MOTOR_RIGHT, vr);
+  Serial.print("Motor Right : ");
+  Serial.println(dir);
+#endif
+  motorState = MOTOR_RIGHTTURN;
 }
 
+#ifndef SHIELD_V2
 void changeDirection(byte d) {
   digitalWrite(PIN_LATCH, LOW);
-  shiftOut(PIN_DATA, PIN_CLOCK, MSBFIRST, d);
+  Serial.println("Shift Register Latch Low");
+  shiftOut(PIN_DATA, PIN_CLOCK, LSBFIRST, d);
+  Serial.println(d);
   digitalWrite(PIN_LATCH, HIGH);
+  Serial.println("Shift Register Latch High (Hold)");
   delay(500);
 }
-
-void initIMU() {
-  Serial.println("Initializing IMU device...");
-  CurieIMU.begin();
-
-  CurieIMU.setGyroRate(100);
-  CurieIMU.setGyroRange(250);
-
-  CurieIMU.setAccelerometerRate(12.5);
-  CurieIMU.setAccelerometerRange(2);
-  CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
-  CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
-  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
-}
+#endif
 
 void initBLE() {
-  blePeripheral.setLocalName("GENUINO101");
-  blePeripheral.setAdvertisedServiceUuid(genuinoService.uuid());
-
-  blePeripheral.addAttribute(genuinoService);
-  blePeripheral.addAttribute(gyroXChar);
-  blePeripheral.addAttribute(gyroXDescriptor);
-  blePeripheral.addAttribute(gyroYChar);
-  blePeripheral.addAttribute(gyroYDescriptor);
-  blePeripheral.addAttribute(gyroZChar);
-  blePeripheral.addAttribute(gyroZDescriptor);
-  blePeripheral.addAttribute(acclXChar);
-  blePeripheral.addAttribute(acclXDescriptor);
-  blePeripheral.addAttribute(acclYChar);
-  blePeripheral.addAttribute(acclYDescriptor);
-  blePeripheral.addAttribute(acclZChar);
-  blePeripheral.addAttribute(acclZDescriptor);
-  blePeripheral.addAttribute(directionCharacteristic);
-  blePeripheral.addAttribute(directionDescriptor);
-  blePeripheral.addAttribute(speedCharacteristic);
-  blePeripheral.addAttribute(speedDescriptor);
-
-  blePeripheral.setEventHandler(BLEConnected, blePeripheralConnectHandler);
-  blePeripheral.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
-
-  directionCharacteristic.setEventHandler(BLEWritten, directionCharacteristicWritten);
-  speedCharacteristic.setEventHandler(BLEWritten, speedCharacteristicWritten);
-
-  gyroXChar.setValue(0);  gyroYChar.setValue(0);  gyroZChar.setValue(0);
-  acclXChar.setValue(0);  acclYChar.setValue(0);  acclZChar.setValue(0);
-
-  directionCharacteristic.setValue(0);
-  speedCharacteristic.setValue(0);
+  BLE.begin();
   
-  blePeripheral.begin();
+  BLE.setLocalName("GENUINO101");
+
+  BLE.setAdvertisedService(machineService);
+  machineService.addCharacteristic(machineStateChara);
+  
+  BLE.setAdvertisedService(motorService);
+  motorService.addCharacteristic(directionChara);
+  motorService.addCharacteristic(speedLeftChara);
+  motorService.addCharacteristic(speedRightChara);
+
+  BLE.addService(machineService);
+  BLE.addService(motorService);
+  
+  BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
+  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
+
+  directionChara.setEventHandler(BLEWritten, directionCharacteristicWritten);
+  speedLeftChara.setEventHandler(BLEWritten, speedLeftCharacteristicWritten);
+  speedRightChara.setEventHandler(BLEWritten, speedRightCharacteristicWritten);
+  
+  BLE.advertise();
   Serial.println("BLE Genuino101 Peripheral");
 }
 
-void sendBLE(int index) {
-  gyroXChar.setValue(g[AXIS_X][index]);
-  gyroYChar.setValue(g[AXIS_Y][index]);
-  gyroZChar.setValue(g[AXIS_Z][index]);
-  acclXChar.setValue(a[AXIS_X][index]);
-  acclYChar.setValue(a[AXIS_Y][index]);
-  acclZChar.setValue(a[AXIS_Z][index]);
-}
+void initIMU() { 
+  Serial.println("Initializing IMU device..."); 
+  CurieIMU.begin(); 
+ 
+  CurieIMU.setGyroRate(100); 
+  CurieIMU.setGyroRange(250); 
+ 
+  CurieIMU.setAccelerometerRate(12.5); 
+  CurieIMU.setAccelerometerRange(2); 
+  CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0); 
+  CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0); 
+  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);  
+} 
 
-void blePeripheralConnectHandler(BLECentral& central) {
+void blePeripheralConnectHandler(BLEDevice central) {
   Serial.print("Connected event, central : ");
   Serial.println(central.address());
   isConnectedCentral = true;
 }
 
-void blePeripheralDisconnectHandler(BLECentral& central) {
+void blePeripheralDisconnectHandler(BLEDevice central) {
   Serial.print("Disconnected event, central : ");
   Serial.println(central.address());
   isConnectedCentral = false;
 }
 
-void speedCharacteristicWritten(BLECentral& central, BLECharacteristic& characteristic) {
-  Serial.print("speedCharacteristic event, written : ");
-  motorSpeed = speedCharacteristic.value();
-  Serial.println(motorSpeed);
+void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  Serial.print("speedLeftCharacteristic event, written : ");
+  motorLeftSpeed = speedLeftChara.value();
+  Serial.println(motorLeftSpeed);
 
   changeRunState();
 }
 
-void directionCharacteristicWritten(BLECentral& central, BLECharacteristic& characteristic) {
+void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  Serial.print("speedRightCharacteristic event, written : ");
+  motorRightSpeed = speedRightChara.value();
+  Serial.println(motorRightSpeed);
+
+  changeRunState();
+}
+
+void directionCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("directionCharacteristic event, written : ");
-  motorDirection = directionCharacteristic.value();
-  Serial.println(motorDirection);  
-      
+  motorDirection = directionChara.value();
+  Serial.println(motorDirection);
+
   changeRunState();
 }
 
 void changeRunState() {
-  switch(motorDirection) {
-    case MACHINE_STOP:
+  switch (motorDirection) {
+    case MOTOR_STOP:
       motorStop();
       break;
-    case MACHINE_FORWARD:
-      motorRun(motorSpeed);
+    case MOTOR_FORWARD:
+      motorRun(motorLeftSpeed,motorRightSpeed);
       break;
-    case MACHINE_RIGHT:
-      motorRight(motorSpeed);
+    case MOTOR_RIGHTTURN:
+      motorRight(motorLeftSpeed,motorRightSpeed);
       break;
-    case MACHINE_LEFT:
-      motorLeft(motorSpeed);
+    case MOTOR_LEFTTURN:
+      motorLeft(motorLeftSpeed,motorRightSpeed);
       break;
-    case MACHINE_BACKWARD:
-      motorBack(motorSpeed);
-      break;   
+    case MOTOR_BACKWARD:
+      motorBack(motorLeftSpeed,motorRightSpeed);
+      break;
     default:
       motorStop();
       break;
-    }  
-}
-
-float Integration(float base, float diff0, float diff1, float t) {
-  float result = 0.0;
-  result = base + (diff0 + ((diff1 - diff0) / 2.0)) * t;
-
-  return result;
-}
-
-float filter(float raw[], int num) {
-  float result = 0.0;
-  for (int i = 0; i < num; i++) {
-    result = result + raw[i];
   }
+}
 
-  return result / num;
+void sendBLE() {
+  String strState = String(motorState);
+  String strAx = String(ax, 1);
+  String strAy = String(ay, 1);
+  String strAz = String(az, 1);
+  String strGx = String(gx, 1);
+  String strGy = String(gy, 1);
+  String strGz = String(gz, 1);
+  String sendData = String(strState + "," + strAx + "," + strAy + "," + strAz + "," + strGx + "," + strGy + "," + strGz + ",");
+  sendData.toCharArray(machineState,sendData.length()+1);
+  Serial.println(machineState);
+  machineStateChara.setValue(machineState);
 }
