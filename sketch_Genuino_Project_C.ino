@@ -65,6 +65,7 @@ void loop() {
 
   if(isConnectedCentral) {  
     sendBLE();
+    delay(1000);
   }
 }
 
@@ -89,10 +90,10 @@ void initMotorShield() {
 #endif
 }
 
-void motorRun(unsigned int vl, unsigned int vr) {  
+void motorBack(unsigned int vl, unsigned int vr) {  
 #ifdef SHIELD_V2
-  motor1->run(FORWARD);
-  motor2->run(FORWARD);
+  motor1->run(BACKWARD);
+  motor2->run(BACKWARD);
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
 #else
@@ -108,7 +109,7 @@ void motorRun(unsigned int vl, unsigned int vr) {
   Serial.print("Motor Run : ");
   Serial.println(dir);
 #endif
-  motorState = MOTOR_FORWARD;
+  motorState = MOTOR_BACKWARD;
 }
 
 void motorStop() {
@@ -130,12 +131,12 @@ void motorStop() {
   motorState = MOTOR_STOP;
 }
 
-void motorBack(unsigned int vl, unsigned int vr) {
+void motorRun(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
-  motor1->run(BACKWARD);
-  motor2->run(BACKWARD);
+  motor1->run(FORWARD);
+  motor2->run(FORWARD);
 #else
 #ifdef SHIELD_V1
   byte dir = 0x06;  //  0 0 0 0 0 1 1 0
@@ -149,7 +150,7 @@ void motorBack(unsigned int vl, unsigned int vr) {
   Serial.print("Motor Back : ");
   Serial.println(dir);
 #endif
-  motorState = MOTOR_BACKWARD;
+  motorState = MOTOR_FORWARD;
 }
 
 void motorLeft(unsigned int vl, unsigned int vr) {
@@ -160,7 +161,7 @@ void motorLeft(unsigned int vl, unsigned int vr) {
   motor2->run(RELEASE);
 #else
 #ifdef SHIELD_V1
-  byte dir = 0x81;  //  1 0 0 0 0 0 0 1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
 #else
   byte dir = 0x0A;  //  0 0 0 0 0 1 0 0
 #endif
@@ -182,7 +183,7 @@ void motorRight(unsigned int vl, unsigned int vr) {
   motor2->run(BACKWARD);
 #else
 #ifdef SHIELD_V1
-  byte dir = 0x81;  //  1 0 0 0 0 0 0 1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
 #else
   byte dir = 0x0A;  //  0 0 0 0 0 0 0 1
 #endif
