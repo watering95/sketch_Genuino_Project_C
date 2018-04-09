@@ -51,11 +51,21 @@ unsigned int setRightSpeed = 0;
 unsigned int motorDirection = MOTOR_FORWARD;
 unsigned int motorState = MOTOR_STOP;
 char machineState[30];
+
 const int timeBLE = 1000;
 const int adjustSpeed = 50;
+const int range = 3;
+const int base = 10;
+const float RADIANS_TO_DEGREES = 180/3.14;
+const float GYROXYZ_TO_DEGREES_PER_SEC = 131;
+const float ALPHA = 0.96; // 입력주기 0.04, 시간상수 1
 
 float gx, gy, gz, ax, ay, az;
+float baseGx, baseGy, baseGz, baseAx, baseAy, baseAz;
+float filtered_angle_x, filtered_angle_y, filtered_angle_z;
+
 int controlDirection;
+int prevTime, nowTime, dt;
 
 void setup() {
   // put your setup code here, to run once:
@@ -66,6 +76,7 @@ void setup() {
 
   CurieTimerOne.start(timeBLE, &sendBLE); 
   pinMode(LED_BUILTIN, OUTPUT);
+  prevTime = millis();
 }
 
 void loop() {
@@ -77,61 +88,107 @@ void loop() {
 
 void autoRun() {
   changeMotorDirection();
-  if(controlDirection < 0) {
-     motorLeftSpeed = adjustSpeed;
-     motorRightSpeed = 0;
+  if(controlDirection < range) {
+     if(motorState == MOTOR_RUN) {
+       motorLeftSpeed = setLeftSpeed + adjustSpeed;
+       motorRightSpeed = setRightSpeed - adjustSpeed;
+     }
+     else {
+       motorLeft(adjustSpeed, adjustSpeed);
+     }
      isAdjusted = false;
   }
-  else if(controlDirection > 0) {
-     motorLeftSpeed = 0;
-     motorRightSpeed = adjustSpeed;
+  else if(controlDirection > -range) {
+     if(motorState == MOTOR_RUN) {
+       motorLeftSpeed = setLeftSpeed - adjustSpeed;
+       motorRightSpeed = setRightSpeed + adjustSpeed;
+     }
+     else {
+       motorRight(adjustSpeed, adjustSpeed);
+     }
      isAdjusted = false;
   }
   else {
-    motorLeftSpeed = 0;
-    motorRightSpeed = 0;
+     if(motorState == MOTOR_RUN) {
+       motorLeftSpeed = setLeftSpeed;
+       motorRightSpeed = setRightSpeed;
+     }
+     else {
+       motorStop();
+     }
+
     isAdjusted = true;
   }
-  if(motorState != MOTOR_STOP) {
-    motorLeftSpeed += setLeftSpeed;
-    motorRightSpeed += setRightSpeed;
-  }
-  changeRunState();
+
+  if(motorState == MOTOR_RUN) changeRunState();
 }
 
 void changeMotorDirection() {
   switch(motorDirection) {
     case MOTOR_FORWARD:
-      controlDirection = ay;
+      // controlDirection = filtered_angle_x;
       break;
     case MOTOR_BACKWARD:
-      controlDirection = ay;
+      // controlDirection = ay;
       break;
     case MOTOR_LEFTTURN:
-      controlDirection = ax;
+      // controlDirection = ax;
       break;
     case MOTOR_RIGHTTURN:
-      controlDirection = ax;
+      // controlDirection = ax;
       break;
   }   
 }
 
 void readIMU() {
+  float accel_x, accel_y, accel_z;
+  float gyro_x, gyro_y, gyro_z;
+  float accel_yz, accel_xz;
+  float tmp_angle_x, tmp_angle_y, tmp_angle_z;
+  float accel_angle_x, accel_angle_y, accel_angle_z;
+  float gyro_angle_x, gyro_angle_y, gyro_angle_z;
+    
   CurieIMU.readGyroScaled(gx, gy, gz);
   CurieIMU.readAccelerometerScaled(ax, ay, az); 
+  nowTime = millis();
+  dt = nowTime - prevTime;
+  prevTime = nowTime;
+
+  accel_x = ax - baseAx;  accel_y = ay - baseAy;  accel_z = az + (16384 - baseAz);
+
+  accel_xz = sqrt(pow(accel_x, 2) + pow(accel_z, 2));
+  accel_angle_x = atan(-accel_y / accel_xz) * RADIANS_TO_DEGREES;
+
+  accel_yz = sqrt(pow(accel_y, 2) + pow(accel_z, 2));
+  accel_angle_y = atan(-accel_x / accel_yz) * RADIANS_TO_DEGREES;
+  
+  accel_angle_z = 0;
+
+  gyro_x = (gx - baseGx) / GYROXYZ_TO_DEGREES_PER_SEC;
+  gyro_y = (gy - baseGy) / GYROXYZ_TO_DEGREES_PER_SEC;
+  gyro_z = (gz - baseGz) / GYROXYZ_TO_DEGREES_PER_SEC;
+
+  gyro_angle_x += gyro_x * dt;
+  gyro_angle_y += gyro_y * dt;
+  gyro_angle_z += gyro_z * dt;
+
+  tmp_angle_x = filtered_angle_x + gyro_x * dt;
+  tmp_angle_y = filtered_angle_y + gyro_y * dt;
+  tmp_angle_z = filtered_angle_z + gyro_z * dt;
+
+  filtered_angle_x = ALPHA * tmp_angle_x * (1.0 - ALPHA) * accel_angle_x;
+  filtered_angle_y = ALPHA * tmp_angle_y * (1.0 - ALPHA) * accel_angle_y;
+  filtered_angle_z = ALPHA * tmp_angle_z * (1.0 - ALPHA) * accel_angle_z;
 }
 
 void sendBLE() {
   if(!isConnectedCentral) return;
   
   String strState = String(motorState);
-  String strAx = String(ax, 1);
-  String strAy = String(ay, 1);
-  String strAz = String(az, 1);
-  String strGx = String(gx, 1);
-  String strGy = String(gy, 1);
-  String strGz = String(gz, 1);
-  String sendData = String(strState + "," + strAx + "," + strAy + "," + strAz + "," + strGx + "," + strGy + "," + strGz + ",");
+  String strAngleX = String(filtered_angle_x, 1);
+  String strAngleY = String(filtered_angle_y, 1);
+  String strAngleZ = String(filtered_angle_z, 1);
+  String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
   Serial.println(machineState);
   machineStateChara.setValue(machineState);
@@ -160,7 +217,7 @@ void initMotorShield() {
 
 void motorBack(unsigned int vl, unsigned int vr) {  
 #ifdef SHIELD_V1
-  byte dir = 0x81;  //  1 0 0 0 0 0 0 1
+  byte dir = 0x81;  //  1 0 0 0 0 0 0 1, M3 BWD, M4 BWD
 #else
 #ifdef SHIELD_V2
   motor1->run(BACKWARD);
@@ -183,7 +240,7 @@ void motorBack(unsigned int vl, unsigned int vr) {
 
 void motorStop() {
 #ifdef SHIELD_V1
-  byte dir = 0x81;  //  1 0 0 0 0 0 0 1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
 #else
 #ifdef SHIELD_V2
   motor1->run(RELEASE);
@@ -203,7 +260,7 @@ void motorStop() {
 
 void motorRun(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V1
-  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
 #else
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
@@ -226,7 +283,7 @@ void motorRun(unsigned int vl, unsigned int vr) {
 
 void motorLeft(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V1
-  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
+  byte dir = 0x03;  //  0 0 0 0 0 0 1 1, M3 FWD, M4 BWD
 #else
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
@@ -249,7 +306,7 @@ void motorLeft(unsigned int vl, unsigned int vr) {
 
 void motorRight(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V1
-  byte dir = 0x06;  //  0 0 0 0 0 1 1 0
+  byte dir = 0x84;  //  1 0 0 0 0 1 0 0, M3 BWD, M4 FWD
 #else
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
@@ -322,7 +379,19 @@ void initIMU() {
   CurieIMU.setAccelerometerRange(2); 
   CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0); 
   CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0); 
-  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);  
+  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
+
+  float tmpGx = 0, tmpGy = 0, tmpGz = 0, tmpAx = 0, tmpAy = 0, tmpAz = 0;
+  
+  for(int i=0; i < base; i++) {
+    CurieIMU.readGyroScaled(gx, gy, gz);
+    CurieIMU.readAccelerometerScaled(ax, ay, az);
+    tmpGx += gx;    tmpGy += gy;    tmpGz += gz;
+    tmpAx += ax;    tmpAy += ay;    tmpAz += az;
+    delay(50);
+  } 
+  baseGx = tmpGx/base;  baseGy = tmpGy/base;  baseGz = tmpGz/base;
+  baseAx = tmpAx/base;  baseAy = tmpAy/base;  baseAz = tmpAz/base;
 } 
 
 void blePeripheralConnectHandler(BLEDevice central) {
