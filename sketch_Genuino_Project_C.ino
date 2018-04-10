@@ -57,15 +57,17 @@ const int adjustSpeed = 50;
 const int range = 3;
 const int base = 10;
 const float RADIANS_TO_DEGREES = 180/3.14;
-const float GYROXYZ_TO_DEGREES_PER_SEC = 131;
+const float GYROXYZ_TO_DEGREES_PER_SEC = 131.0;
 const float ALPHA = 0.96; // 입력주기 0.04, 시간상수 1
 
-float gx, gy, gz, ax, ay, az;
-float baseGx, baseGy, baseGz, baseAx, baseAy, baseAz;
-float filtered_angle_x, filtered_angle_y, filtered_angle_z;
+int gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0;
+int baseGx = 0, baseGy = 0, baseGz = 0, baseAx = 0, baseAy = 0, baseAz = 0;
+float filtered_angle_x = 0, filtered_angle_y = 0, filtered_angle_z = 0;
+float gyro_angle_x = 0, gyro_angle_y = 0, gyro_angle_z = 0;
 
 int controlAngle;
-int prevTime, nowTime, dt;
+int prevTime, nowTime;
+float dt = 0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -83,7 +85,7 @@ void loop() {
   // put your main code here, to run repeatedly:
   BLE.poll();
   readIMU();
-  if(isAuto) autoRun();
+//  if(isAuto) autoRun();
 }
 
 void autoRun() {
@@ -129,7 +131,7 @@ void changeMotorAngle() {
       controlAngle = filtered_angle_z;
       break;
     case MOTOR_BACKWARD:
-      controlDirection = filtered_angle_z;
+      controlAngle = filtered_angle_z;
       break;
     case MOTOR_LEFTTURN:
       controlAngle = filtered_angle_z - 90;
@@ -143,23 +145,23 @@ void changeMotorAngle() {
 }
 
 void readIMU() {
-  float accel_x, accel_y, accel_z;
-  float gyro_x, gyro_y, gyro_z;
-  float accel_yz, accel_xz;
-  float tmp_angle_x, tmp_angle_y, tmp_angle_z;
-  float accel_angle_x, accel_angle_y, accel_angle_z;
-  float gyro_angle_x, gyro_angle_y, gyro_angle_z;
-    
-  CurieIMU.readGyroScaled(gx, gy, gz);
-  CurieIMU.readAccelerometerScaled(ax, ay, az); 
+  String data; 
+  int accel_x = 0, accel_y = 0, accel_z = 0;
+  int gyro_x = 0, gyro_y = 0, gyro_z = 0;
+  float accel_yz = 0, accel_xz = 0;
+  float tmp_angle_x = 0, tmp_angle_y = 0, tmp_angle_z = 0;
+  float accel_angle_x = 0, accel_angle_y = 0, accel_angle_z = 0;
+ 
+  CurieIMU.readGyro(gx, gy, gz);
+  CurieIMU.readAccelerometer(ax, ay, az); 
   nowTime = millis();
-  dt = nowTime - prevTime;
+  dt = (nowTime - prevTime)/1000.0;
   prevTime = nowTime;
 
   accel_x = ax - baseAx;  accel_y = ay - baseAy;  accel_z = az + (16384 - baseAz);
 
   accel_xz = sqrt(pow(accel_x, 2) + pow(accel_z, 2));
-  accel_angle_x = atan(-accel_y / accel_xz) * RADIANS_TO_DEGREES;
+  accel_angle_x = atan(accel_y / accel_xz) * RADIANS_TO_DEGREES;
 
   accel_yz = sqrt(pow(accel_y, 2) + pow(accel_z, 2));
   accel_angle_y = atan(-accel_x / accel_yz) * RADIANS_TO_DEGREES;
@@ -170,17 +172,22 @@ void readIMU() {
   gyro_y = (gy - baseGy) / GYROXYZ_TO_DEGREES_PER_SEC;
   gyro_z = (gz - baseGz) / GYROXYZ_TO_DEGREES_PER_SEC;
 
-  gyro_angle_x += gyro_x * dt;
-  gyro_angle_y += gyro_y * dt;
-  gyro_angle_z += gyro_z * dt;
+  gyro_angle_x = gyro_x;
+  gyro_angle_y = gyro_y;
+  gyro_angle_z = gyro_z;
+  
+  tmp_angle_x = filtered_angle_x + gyro_angle_x * dt;
+  tmp_angle_y = filtered_angle_y + gyro_angle_y * dt;
+  tmp_angle_z = filtered_angle_z + gyro_angle_z * dt;
 
-  tmp_angle_x = filtered_angle_x + gyro_x * dt;
-  tmp_angle_y = filtered_angle_y + gyro_y * dt;
-  tmp_angle_z = filtered_angle_z + gyro_z * dt;
+  filtered_angle_x = ALPHA * tmp_angle_x + (1.0 - ALPHA) * accel_angle_x;
+  filtered_angle_y = ALPHA * tmp_angle_y + (1.0 - ALPHA) * accel_angle_y;
+  filtered_angle_z = ALPHA * tmp_angle_z + (1.0 - ALPHA) * accel_angle_z;
+  
+  data = String(String(dt,3) + ":" + String(filtered_angle_x,5) + "," + String(filtered_angle_y,5) + "," + String(filtered_angle_z,5) + ",");
+  Serial.println(data);
 
-  filtered_angle_x = ALPHA * tmp_angle_x * (1.0 - ALPHA) * accel_angle_x;
-  filtered_angle_y = ALPHA * tmp_angle_y * (1.0 - ALPHA) * accel_angle_y;
-  filtered_angle_z = ALPHA * tmp_angle_z * (1.0 - ALPHA) * accel_angle_z;
+  delay(100);
 }
 
 void sendBLE() {
@@ -192,7 +199,7 @@ void sendBLE() {
   String strAngleZ = String(filtered_angle_z, 1);
   String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
-  Serial.println(machineState);
+//  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
@@ -205,7 +212,7 @@ void initMotorShield() {
   AFMS.begin();
   motor1->run(RELEASE);
   motor2->run(RELEASE);
-  Serial.println("Init Motor Shield V2);
+  Serial.println("Init Motor Shield V2");
 #else
   pinMode(PIN_DATA, OUTPUT);
   pinMode(PIN_CLOCK, OUTPUT);
@@ -370,7 +377,10 @@ void initBLE() {
   Serial.println("BLE Genuino101 Peripheral");
 }
 
-void initIMU() { 
+void initIMU() {
+  String data; 
+  int tmpGx = 0, tmpGy = 0, tmpGz = 0, tmpAx = 0, tmpAy = 0, tmpAz = 0;
+  
   Serial.println("Initializing IMU device..."); 
   CurieIMU.begin(); 
  
@@ -379,21 +389,21 @@ void initIMU() {
  
   CurieIMU.setAccelerometerRate(12.5); 
   CurieIMU.setAccelerometerRange(2); 
-  CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0); 
-  CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0); 
-  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
 
-  float tmpGx = 0, tmpGy = 0, tmpGz = 0, tmpAx = 0, tmpAy = 0, tmpAz = 0;
-  
   for(int i=0; i < base; i++) {
-    CurieIMU.readGyroScaled(gx, gy, gz);
-    CurieIMU.readAccelerometerScaled(ax, ay, az);
+    CurieIMU.readGyro(gx, gy, gz);
+    CurieIMU.readAccelerometer(ax, ay, az);
     tmpGx += gx;    tmpGy += gy;    tmpGz += gz;
     tmpAx += ax;    tmpAy += ay;    tmpAz += az;
+    data = String(String(tmpGx) + "," + String(tmpGy) + "," + String(tmpGz) + "," + String(tmpAx) + "," + String(tmpAy) + "," + String(tmpAz) + ",");
+    Serial.println(data);
     delay(50);
   } 
+  Serial.println("average");
   baseGx = tmpGx/base;  baseGy = tmpGy/base;  baseGz = tmpGz/base;
   baseAx = tmpAx/base;  baseAy = tmpAy/base;  baseAz = tmpAz/base;
+  data = String(String(baseGx) + "," + String(baseGy) + "," + String(baseGz) + "," + String(baseAx) + "," + String(baseAy) + "," + String(baseAz) + ",");
+  Serial.println(data);
 } 
 
 void blePeripheralConnectHandler(BLEDevice central) {
