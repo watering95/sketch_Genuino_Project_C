@@ -64,7 +64,7 @@ float gx, gy, gz, ax, ay, az;
 float baseGx, baseGy, baseGz, baseAx, baseAy, baseAz;
 float filtered_angle_x, filtered_angle_y, filtered_angle_z;
 
-int controlDirection;
+int controlAngle;
 int prevTime, nowTime, dt;
 
 void setup() {
@@ -87,8 +87,8 @@ void loop() {
 }
 
 void autoRun() {
-  changeMotorDirection();
-  if(controlDirection < range) {
+  changeMotorAngle();
+  if(controlAngle < range) {
      if(motorState == MOTOR_RUN) {
        motorLeftSpeed = setLeftSpeed + adjustSpeed;
        motorRightSpeed = setRightSpeed - adjustSpeed;
@@ -98,7 +98,7 @@ void autoRun() {
      }
      isAdjusted = false;
   }
-  else if(controlDirection > -range) {
+  else if(controlAngle > -range) {
      if(motorState == MOTOR_RUN) {
        motorLeftSpeed = setLeftSpeed - adjustSpeed;
        motorRightSpeed = setRightSpeed + adjustSpeed;
@@ -123,21 +123,23 @@ void autoRun() {
   if(motorState == MOTOR_RUN) changeRunState();
 }
 
-void changeMotorDirection() {
+void changeMotorAngle() {
   switch(motorDirection) {
     case MOTOR_FORWARD:
-      // controlDirection = filtered_angle_x;
+      controlAngle = filtered_angle_z;
       break;
     case MOTOR_BACKWARD:
-      // controlDirection = ay;
+      controlDirection = filtered_angle_z;
       break;
     case MOTOR_LEFTTURN:
-      // controlDirection = ax;
+      controlAngle = filtered_angle_z - 90;
       break;
     case MOTOR_RIGHTTURN:
-      // controlDirection = ax;
+      controlAngle = filtered_angle_z + 90;
       break;
-  }   
+  }  
+  if(controlAngle < 0) controlAngle += 360;
+  else if(controlAngle > 360) controlAngle -= 360;
 }
 
 void readIMU() {
