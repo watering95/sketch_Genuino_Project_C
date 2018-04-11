@@ -36,7 +36,7 @@ BLEService machineService("BBB0");
 BLECharacteristic machineStateChara("BBB1", BLERead | BLENotify, 30);
 
 BLEService motorService("0174");
-BLEIntCharacteristic directionChara("0175", BLEWrite);
+BLEIntCharacteristic stateChara("0175", BLEWrite);
 BLEIntCharacteristic speedLeftChara("0176", BLEWrite);
 BLEIntCharacteristic speedRightChara("0177", BLEWrite);
 BLEIntCharacteristic isAutoChara("0178", BLEWrite);
@@ -52,7 +52,8 @@ unsigned int motorDirection = MOTOR_FORWARD;
 unsigned int motorState = MOTOR_STOP;
 char machineState[30];
 
-const int timeBLE = 1000;
+const int timeBLE = 1000000;
+const int timeIMU = 100000;
 const int adjustSpeed = 50;
 const int range = 3;
 const int base = 10;
@@ -77,6 +78,7 @@ void setup() {
   initIMU();
 
   CurieTimerOne.start(timeBLE, &sendBLE); 
+
   pinMode(LED_BUILTIN, OUTPUT);
   prevTime = millis();
 }
@@ -86,6 +88,7 @@ void loop() {
   BLE.poll();
   readIMU();
 //  if(isAuto) autoRun();
+//  delay(timeIMU);
 }
 
 void autoRun() {
@@ -149,7 +152,6 @@ void readIMU() {
   int accel_x = 0, accel_y = 0, accel_z = 0;
   int gyro_x = 0, gyro_y = 0, gyro_z = 0;
   float accel_yz = 0, accel_xz = 0;
-  float tmp_angle_x = 0, tmp_angle_y = 0, tmp_angle_z = 0;
   float accel_angle_x = 0, accel_angle_y = 0, accel_angle_z = 0;
  
   CurieIMU.readGyro(gx, gy, gz);
@@ -172,22 +174,13 @@ void readIMU() {
   gyro_y = (gy - baseGy) / GYROXYZ_TO_DEGREES_PER_SEC;
   gyro_z = (gz - baseGz) / GYROXYZ_TO_DEGREES_PER_SEC;
 
-  gyro_angle_x = gyro_x;
-  gyro_angle_y = gyro_y;
-  gyro_angle_z = gyro_z;
-  
-  tmp_angle_x = filtered_angle_x + gyro_angle_x * dt;
-  tmp_angle_y = filtered_angle_y + gyro_angle_y * dt;
-  tmp_angle_z = filtered_angle_z + gyro_angle_z * dt;
+  gyro_angle_x = gyro_x * dt;
+  gyro_angle_y = gyro_y * dt;
+  gyro_angle_z = gyro_z * dt;
 
-  filtered_angle_x = ALPHA * tmp_angle_x + (1.0 - ALPHA) * accel_angle_x;
-  filtered_angle_y = ALPHA * tmp_angle_y + (1.0 - ALPHA) * accel_angle_y;
-  filtered_angle_z = ALPHA * tmp_angle_z + (1.0 - ALPHA) * accel_angle_z;
-  
-  data = String(String(dt,3) + ":" + String(filtered_angle_x,5) + "," + String(filtered_angle_y,5) + "," + String(filtered_angle_z,5) + ",");
-  Serial.println(data);
-
-  delay(100);
+  filtered_angle_x = ALPHA * (filtered_angle_x + gyro_angle_x) + (1.0 - ALPHA) * accel_angle_x;
+  filtered_angle_y = ALPHA * (filtered_angle_y + gyro_angle_y) + (1.0 - ALPHA) * accel_angle_y;
+  filtered_angle_z = ALPHA * (filtered_angle_z + gyro_angle_z) + (1.0 - ALPHA) * accel_angle_z;
 }
 
 void sendBLE() {
@@ -199,7 +192,7 @@ void sendBLE() {
   String strAngleZ = String(filtered_angle_z, 1);
   String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
-//  Serial.println(machineState);
+  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
@@ -357,7 +350,7 @@ void initBLE() {
   machineService.addCharacteristic(machineStateChara);
   
   BLE.setAdvertisedService(motorService);
-  motorService.addCharacteristic(directionChara);
+  motorService.addCharacteristic(stateChara);
   motorService.addCharacteristic(speedLeftChara);
   motorService.addCharacteristic(speedRightChara);
   motorService.addCharacteristic(isAutoChara);
@@ -368,7 +361,7 @@ void initBLE() {
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
 
-  directionChara.setEventHandler(BLEWritten, directionCharacteristicWritten);
+  stateChara.setEventHandler(BLEWritten, stateCharacteristicWritten);
   speedLeftChara.setEventHandler(BLEWritten, speedLeftCharacteristicWritten);
   speedRightChara.setEventHandler(BLEWritten, speedRightCharacteristicWritten);
   isAutoChara.setEventHandler(BLEWritten, isAutoCharacteristicWritten);
@@ -434,9 +427,9 @@ void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic charac
   changeRunState();
 }
 
-void directionCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+void stateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("directionCharacteristic event, written : ");
-  motorDirection = directionChara.value();
+  motorState = stateChara.value();
   Serial.println(motorDirection);
 
   changeRunState();
@@ -444,7 +437,7 @@ void directionCharacteristicWritten(BLEDevice central, BLECharacteristic charact
 
 void isAutoCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("isAutoCharacteristic event, written : ");
-  if(directionChara.value() == 1) isAuto = true;
+  if(isAutoChara.value() == 1) isAuto = true;
   else isAuto = false;
 }
 
