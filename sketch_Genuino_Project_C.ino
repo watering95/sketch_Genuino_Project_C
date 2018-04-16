@@ -87,7 +87,7 @@ void loop() {
   // put your main code here, to run repeatedly:
   BLE.poll();
   readIMU();
-//  if(isAuto) autoRun();
+  if(isAuto) autoRun();
 //  delay(timeIMU);
 }
 
@@ -218,14 +218,14 @@ void initMotorShield() {
 }
 
 void motorBack(unsigned int vl, unsigned int vr) {  
-#ifdef SHIELD_V1
-  byte dir = 0x81;  //  1 0 0 0 0 0 0 1, M3 BWD, M4 BWD
-#else
 #ifdef SHIELD_V2
   motor1->run(BACKWARD);
   motor2->run(BACKWARD);
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x81;  //  1 0 0 0 0 0 0 1, M3 BWD, M4 BWD
 #else
   byte dir = 0x0A;  //  0 0 0 0 0 1 0 1
 #endif  
@@ -234,19 +234,19 @@ void motorBack(unsigned int vl, unsigned int vr) {
   analogWrite(MOTOR_RIGHT, vr);
   analogWrite(MOTOR_LEFT, vl);
 #endif
-  Serial.print("Motor Run : ");
+  Serial.print("Motor Back : ");
   Serial.println(dir);
   motorDirection = MOTOR_BACKWARD;
   motorState = MOTOR_BACKWARD;
 }
 
 void motorStop() {
-#ifdef SHIELD_V1
-  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
-#else
 #ifdef SHIELD_V2
   motor1->run(RELEASE);
   motor2->run(RELEASE);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
 #else
   byte dir = 0x0A;  //  0 0 0 0 0 1 0 1
 #endif
@@ -261,14 +261,14 @@ void motorStop() {
 }
 
 void motorRun(unsigned int vl, unsigned int vr) {
-#ifdef SHIELD_V1
-  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
-#else
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
   motor1->run(FORWARD);
   motor2->run(FORWARD);
+#else
+#ifdef SHIELD_V1
+  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
 #else
   byte dir = 0x05;  //  0 0 0 0 1 0 1 0
 #endif
@@ -277,28 +277,28 @@ void motorRun(unsigned int vl, unsigned int vr) {
   analogWrite(MOTOR_RIGHT, vr);
   analogWrite(MOTOR_LEFT, vl);
 #endif
-  Serial.print("Motor Back : ");
+  Serial.print("Motor Run : ");
   Serial.println(dir);
   motorDirection = MOTOR_FORWARD;
   motorState = MOTOR_RUN;
 }
 
 void motorLeft(unsigned int vl, unsigned int vr) {
-#ifdef SHIELD_V1
-  byte dir = 0x03;  //  0 0 0 0 0 0 1 1, M3 FWD, M4 BWD
-#else
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
   motor1->run(BACKWARD);
   motor2->run(RELEASE);
 #else
+#ifdef SHIELD_V1
+  byte dir = 0x84;  //  1 0 0 0 0 1 0 0, M3 BWD, M4 FWD
+#else
   byte dir = 0x0A;  //  0 0 0 0 0 1 0 0
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
   analogWrite(MOTOR_LEFT, vl);
-  analogWrite(MOTOR_RIGHT, 0);
+  analogWrite(MOTOR_RIGHT, vr);
 #endif
   Serial.print("Motor Left : ");
   Serial.println(dir);
@@ -307,20 +307,20 @@ void motorLeft(unsigned int vl, unsigned int vr) {
 }
 
 void motorRight(unsigned int vl, unsigned int vr) {
-#ifdef SHIELD_V1
-  byte dir = 0x84;  //  1 0 0 0 0 1 0 0, M3 BWD, M4 FWD
-#else
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
   motor1->run(RELEASE);
   motor2->run(BACKWARD);
 #else
+#ifdef SHIELD_V1
+  byte dir = 0x03;  //  0 0 0 0 0 0 1 1, M3 FWD, M4 BWD
+#else
   byte dir = 0x0A;  //  0 0 0 0 0 0 0 1
 #endif
   digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, 0);
+  analogWrite(MOTOR_LEFT, vl);
   analogWrite(MOTOR_RIGHT, vr);
 #endif
   Serial.print("Motor Right : ");
@@ -414,7 +414,7 @@ void blePeripheralDisconnectHandler(BLEDevice central) {
 void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("speedLeftCharacteristic event, written : ");
   setLeftSpeed = speedLeftChara.value();
-  Serial.println(motorLeftSpeed);
+  Serial.println(setLeftSpeed);
 
   changeRunState();
 }
@@ -422,7 +422,7 @@ void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic charact
 void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("speedRightCharacteristic event, written : ");
   setRightSpeed = speedRightChara.value();
-  Serial.println(motorRightSpeed);
+  Serial.println(setRightSpeed);
 
   changeRunState();
 }
@@ -439,9 +439,20 @@ void isAutoCharacteristicWritten(BLEDevice central, BLECharacteristic characteri
   Serial.print("isAutoCharacteristic event, written : ");
   if(isAutoChara.value() == 1) isAuto = true;
   else isAuto = false;
+  Serial.println(isAuto);
 }
 
 void changeRunState() {
+  if(!isAuto) {
+    motorLeftSpeed = setLeftSpeed;
+    motorRightSpeed = setRightSpeed;
+  }
+  Serial.print("left : ");
+  Serial.print(motorLeftSpeed);
+  Serial.print(", ");
+  Serial.print("right : ");
+  Serial.println(motorRightSpeed);
+
   switch (motorState) {
     case MOTOR_STOP:
       motorStop();
