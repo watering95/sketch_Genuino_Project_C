@@ -1,8 +1,14 @@
 #include <CurieBLE.h>
-#include "CurieIMU.h"
+#include <CurieIMU.h>
 #include "CurieTimerOne.h"
 
 #define SHIELD_V1
+//#define MADGWICK
+
+#ifdef MADGWICK
+#include <MadgwickAHRS.h>
+Madgwick filter;
+#endif
 
 #ifdef SHIELD_V1
 #define MOTOR_RIGHT 5  //H-Bridge M4
@@ -25,10 +31,14 @@ Adafruit_DCMotor *motor2 = AFMS.getMotor(4);
 #define PIN_LATCH 12
 #endif
 
-#define MOTOR_FORWARD 2
-#define MOTOR_BACKWARD  5
-#define MOTOR_LEFTTURN  4
-#define MOTOR_RIGHTTURN 3
+#define MACHINE_AUTO  1
+#define MACHINE_MANUAL  0
+
+#define MACHINE_FORWARD 2
+#define MACHINE_BACKWARD  5
+#define MACHINE_LEFTTURN  4
+#define MACHINE_RIGHTTURN 3
+
 #define MOTOR_STOP  0
 #define MOTOR_RUN   1
 
@@ -44,27 +54,28 @@ BLEIntCharacteristic isAutoChara("0178", BLEWrite);
 boolean isConnectedCentral = false;
 boolean isAdjusted = false;
 boolean isAuto = false;
-unsigned int motorLeftSpeed = 0;
-unsigned int motorRightSpeed = 0;
+
+unsigned int leftSpeed = 0;
+unsigned int rightSpeed = 0;
 unsigned int setLeftSpeed = 0;
 unsigned int setRightSpeed = 0;
-unsigned int motorDirection = MOTOR_FORWARD;
+unsigned int machineDirection = MACHINE_FORWARD;
 unsigned int motorState = MOTOR_STOP;
 char machineState[30];
 
 const int timeBLE = 1000000;
-const int timeIMU = 100000;
+const int timeIMU = 4;
 const int adjustSpeed = 50;
 const int range = 3;
 const int base = 10;
-const float RADIANS_TO_DEGREES = 180/3.14;
-const float GYROXYZ_TO_DEGREES_PER_SEC = 131.0;
-const float ALPHA = 0.96; // 입력주기 0.04, 시간상수 1
 
-int gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0;
-int baseGx = 0, baseGy = 0, baseGz = 0, baseAx = 0, baseAy = 0, baseAz = 0;
-float filtered_angle_x = 0, filtered_angle_y = 0, filtered_angle_z = 0;
-float gyro_angle_x = 0, gyro_angle_y = 0, gyro_angle_z = 0;
+int gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0; //RAW값
+int baseGx = 0, baseGy = 0, baseGz = 0, baseAx = 0, baseAy = 0, baseAz = 0; //초기값
+
+
+float filtered_angle_roll = 0;
+float filtered_angle_pitch = 0;
+float filtered_angle_yaw = 0;
 
 int controlAngle;
 int prevTime, nowTime;
@@ -86,17 +97,22 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   BLE.poll();
-  readIMU();
+
+  nowTime = millis();
+  dt = nowTime - prevTime;
+  if(dt > timeIMU) {
+    readIMU();
+    prevTime = nowTime;
+  }
   if(isAuto) autoRun();
-//  delay(timeIMU);
 }
 
 void autoRun() {
   changeMotorAngle();
   if(controlAngle < range) {
      if(motorState == MOTOR_RUN) {
-       motorLeftSpeed = setLeftSpeed + adjustSpeed;
-       motorRightSpeed = setRightSpeed - adjustSpeed;
+       leftSpeed = setLeftSpeed + adjustSpeed;
+       rightSpeed = setRightSpeed - adjustSpeed;
      }
      else {
        motorLeft(adjustSpeed, adjustSpeed);
@@ -105,8 +121,8 @@ void autoRun() {
   }
   else if(controlAngle > -range) {
      if(motorState == MOTOR_RUN) {
-       motorLeftSpeed = setLeftSpeed - adjustSpeed;
-       motorRightSpeed = setRightSpeed + adjustSpeed;
+       leftSpeed = setLeftSpeed - adjustSpeed;
+       rightSpeed = setRightSpeed + adjustSpeed;
      }
      else {
        motorRight(adjustSpeed, adjustSpeed);
@@ -115,8 +131,8 @@ void autoRun() {
   }
   else {
      if(motorState == MOTOR_RUN) {
-       motorLeftSpeed = setLeftSpeed;
-       motorRightSpeed = setRightSpeed;
+       leftSpeed = setLeftSpeed;
+       rightSpeed = setRightSpeed;
      }
      else {
        motorStop();
@@ -129,18 +145,18 @@ void autoRun() {
 }
 
 void changeMotorAngle() {
-  switch(motorDirection) {
-    case MOTOR_FORWARD:
-      controlAngle = filtered_angle_z;
+  switch(machineDirection) {
+    case MACHINE_FORWARD:
+      controlAngle = filtered_angle_yaw;
       break;
-    case MOTOR_BACKWARD:
-      controlAngle = filtered_angle_z;
+    case MACHINE_BACKWARD:
+      controlAngle = filtered_angle_yaw;
       break;
-    case MOTOR_LEFTTURN:
-      controlAngle = filtered_angle_z - 90;
+    case MACHINE_LEFTTURN:
+      controlAngle = filtered_angle_yaw - 90;
       break;
-    case MOTOR_RIGHTTURN:
-      controlAngle = filtered_angle_z + 90;
+    case MACHINE_RIGHTTURN:
+      controlAngle = filtered_angle_yaw + 90;
       break;
   }  
   if(controlAngle < 0) controlAngle += 360;
@@ -148,51 +164,119 @@ void changeMotorAngle() {
 }
 
 void readIMU() {
-  String data; 
+
+#ifdef MADGWICK // Madgwick 사용 
+  float accel_x = 0, accel_y = 0, accel_z = 0;
+  float gyro_x = 0, gyro_y = 0, gyro_z = 0;
+  
+  CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
+
+  accel_x = convertRawAcceleration(ax);
+  accel_y = convertRawAcceleration(ay);
+  accel_z = convertRawAcceleration(az);
+
+  gyro_x = convertRawGyro(gx);
+  gyro_y = convertRawGyro(gy);
+  gyro_z = convertRawGyro(gz);
+
+  filter.updateIMU(accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z);
+
+  filtered_angle_roll = filter.getRoll();
+  filtered_angle_pitch = filter.getPitch();
+  filtered_angle_yaw = filter.getYaw();
+
+#else // Madgwick 미사용
+
+  const float RADIANS_TO_DEGREES = 180/3.14159;
+  const float GYROXYZ_TO_DEGREES_PER_SEC = 131.0;
+  const float ALPHA = 0.96; // 입력주기 0.04, 시간상수 1
+  
   int accel_x = 0, accel_y = 0, accel_z = 0;
   int gyro_x = 0, gyro_y = 0, gyro_z = 0;
+
   float accel_yz = 0, accel_xz = 0;
-  float accel_angle_x = 0, accel_angle_y = 0, accel_angle_z = 0;
- 
+
+  float accel_angle_roll = 0;
+  float accel_angle_pitch = 0;
+  float accel_angle_yaw = 0;
+
+  float gyro_angle_roll = 0;
+  float gyro_angle_pitch = 0;
+  float gyro_angle_yaw = 0;
+  
   CurieIMU.readGyro(gx, gy, gz);
   CurieIMU.readAccelerometer(ax, ay, az); 
-  nowTime = millis();
-  dt = (nowTime - prevTime)/1000.0;
-  prevTime = nowTime;
 
-  accel_x = ax - baseAx;  accel_y = ay - baseAy;  accel_z = az + (16384 - baseAz);
+  accel_x = ax - baseAx;  accel_y = ay - baseAy;  accel_z = (az - baseAz) + 16384;
 
   accel_xz = sqrt(pow(accel_x, 2) + pow(accel_z, 2));
-  accel_angle_x = atan(accel_y / accel_xz) * RADIANS_TO_DEGREES;
+  accel_angle_pitch = atan(accel_y / accel_xz) * RADIANS_TO_DEGREES;
 
   accel_yz = sqrt(pow(accel_y, 2) + pow(accel_z, 2));
-  accel_angle_y = atan(-accel_x / accel_yz) * RADIANS_TO_DEGREES;
+  accel_angle_roll = atan(-accel_x / accel_yz) * RADIANS_TO_DEGREES;
   
-  accel_angle_z = 0;
+//  accel_angle_yaw = 0;
 
   gyro_x = (gx - baseGx) / GYROXYZ_TO_DEGREES_PER_SEC;
   gyro_y = (gy - baseGy) / GYROXYZ_TO_DEGREES_PER_SEC;
   gyro_z = (gz - baseGz) / GYROXYZ_TO_DEGREES_PER_SEC;
 
-  gyro_angle_x = gyro_x * dt;
-  gyro_angle_y = gyro_y * dt;
-  gyro_angle_z = gyro_z * dt;
+  gyro_angle_roll = gyro_x * dt / 1000;
+  gyro_angle_pitch = gyro_y * dt / 1000;
+  gyro_angle_yaw = gyro_z * dt / 1000;
+  
+  filtered_angle_roll = (ALPHA * (filtered_angle_roll + gyro_angle_roll)) + ((1.0 - ALPHA) * accel_angle_roll);
+  filtered_angle_pitch = (ALPHA * (filtered_angle_pitch + gyro_angle_pitch)) + ((1.0 - ALPHA) * accel_angle_pitch);
+//  filtered_angle_yaw = (ALPHA * (filtered_angle_yaw + gyro_angle_yaw)) + ((1.0 - ALPHA) * accel_angle_yaw);
+  filtered_angle_yaw += gyro_angle_yaw;
 
-  filtered_angle_x = ALPHA * (filtered_angle_x + gyro_angle_x) + (1.0 - ALPHA) * accel_angle_x;
-  filtered_angle_y = ALPHA * (filtered_angle_y + gyro_angle_y) + (1.0 - ALPHA) * accel_angle_y;
-  filtered_angle_z = ALPHA * (filtered_angle_z + gyro_angle_z) + (1.0 - ALPHA) * accel_angle_z;
+  // data check
+/*  
+  String strAngleX = String(gyro_angle_roll, 3);
+  String strAngleY = String(gyro_angle_pitch, 3);
+  String strAngleZ = String(gyro_angle_yaw, 3);
+*/
+#endif
+/*
+  String strAngleX = String(gyro_x);
+  String strAngleY = String(gyro_y);
+  String strAngleZ = String(gyro_z);
+*/
+/*  
+  String strAngleX = String(filtered_angle_roll, 3);
+  String strAngleY = String(filtered_angle_pitch, 3);
+  String strAngleZ = String(filtered_angle_yaw, 3);
+*/
+
+  String strAngleX = String(gyro_z);
+  String strAngleY = String(gyro_angle_yaw, 3);
+  String strAngleZ = String(filtered_angle_yaw, 3);
+  String sendData = String(strAngleX + "," + strAngleY + "," + strAngleZ + ",");
+  Serial.println(sendData);
 }
+
+#ifdef MADGWICK
+float convertRawAcceleration(int raw) {
+  float a = (raw * 2.0) / 32768.0;
+  return a;  
+}
+
+float convertRawGyro(int raw) {
+  float g = (raw * 250.0) / 32768.0;
+  return g;
+}
+#endif
 
 void sendBLE() {
   if(!isConnectedCentral) return;
   
   String strState = String(motorState);
-  String strAngleX = String(filtered_angle_x, 1);
-  String strAngleY = String(filtered_angle_y, 1);
-  String strAngleZ = String(filtered_angle_z, 1);
+  String strAngleX = String(filtered_angle_roll, 1);
+  String strAngleY = String(filtered_angle_pitch, 1);
+  String strAngleZ = String(filtered_angle_yaw, 1);
   String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
-  Serial.println(machineState);
+//  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
@@ -236,8 +320,8 @@ void motorBack(unsigned int vl, unsigned int vr) {
 #endif
   Serial.print("Motor Back : ");
   Serial.println(dir);
-  motorDirection = MOTOR_BACKWARD;
-  motorState = MOTOR_BACKWARD;
+  machineDirection = MACHINE_BACKWARD;
+  motorState = MACHINE_BACKWARD;
 }
 
 void motorStop() {
@@ -256,7 +340,7 @@ void motorStop() {
 #endif
   Serial.print("Motor Stop : ");
   Serial.println(dir);
-  motorDirection = MOTOR_FORWARD;
+  machineDirection = MACHINE_FORWARD;
   motorState = MOTOR_STOP;
 }
 
@@ -279,7 +363,7 @@ void motorRun(unsigned int vl, unsigned int vr) {
 #endif
   Serial.print("Motor Run : ");
   Serial.println(dir);
-  motorDirection = MOTOR_FORWARD;
+  machineDirection = MACHINE_FORWARD;
   motorState = MOTOR_RUN;
 }
 
@@ -297,13 +381,13 @@ void motorLeft(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, vl);
-  analogWrite(MOTOR_RIGHT, vr);
+  analogWrite(MOTOR_LEFT, vl/2);
+  analogWrite(MOTOR_RIGHT, vr/2);
 #endif
   Serial.print("Motor Left : ");
   Serial.println(dir);
-  motorDirection = MOTOR_LEFTTURN;
-  motorState = MOTOR_LEFTTURN;
+  machineDirection = MACHINE_LEFTTURN;
+  motorState = MACHINE_LEFTTURN;
 }
 
 void motorRight(unsigned int vl, unsigned int vr) {
@@ -320,13 +404,13 @@ void motorRight(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, vl);
-  analogWrite(MOTOR_RIGHT, vr);
+  analogWrite(MOTOR_LEFT, vl/2);
+  analogWrite(MOTOR_RIGHT, vr/2);
 #endif
   Serial.print("Motor Right : ");
   Serial.println(dir);
-  motorDirection = MOTOR_RIGHTTURN;
-  motorState = MOTOR_RIGHTTURN;
+  machineDirection = MACHINE_RIGHTTURN;
+  motorState = MACHINE_RIGHTTURN;
 }
 
 #ifndef SHIELD_V2
@@ -377,10 +461,14 @@ void initIMU() {
   Serial.println("Initializing IMU device..."); 
   CurieIMU.begin(); 
  
-  CurieIMU.setGyroRate(100); 
+  CurieIMU.setGyroRate(25); 
   CurieIMU.setGyroRange(250); 
- 
-  CurieIMU.setAccelerometerRate(12.5); 
+
+  #ifdef MADGWICK
+  filter.begin(25);
+  #endif
+  
+  CurieIMU.setAccelerometerRate(25); 
   CurieIMU.setAccelerometerRange(2); 
 
   for(int i=0; i < base; i++) {
@@ -392,11 +480,13 @@ void initIMU() {
     Serial.println(data);
     delay(50);
   } 
+/*
   Serial.println("average");
   baseGx = tmpGx/base;  baseGy = tmpGy/base;  baseGz = tmpGz/base;
   baseAx = tmpAx/base;  baseAy = tmpAy/base;  baseAz = tmpAz/base;
   data = String(String(baseGx) + "," + String(baseGy) + "," + String(baseGz) + "," + String(baseAx) + "," + String(baseAy) + "," + String(baseAz) + ",");
   Serial.println(data);
+*/
 } 
 
 void blePeripheralConnectHandler(BLEDevice central) {
@@ -430,28 +520,28 @@ void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic charac
 void stateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("directionCharacteristic event, written : ");
   motorState = stateChara.value();
-  Serial.println(motorDirection);
+  Serial.println(machineDirection);
 
   changeRunState();
 }
 
 void isAutoCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("isAutoCharacteristic event, written : ");
-  if(isAutoChara.value() == 1) isAuto = true;
+  if(isAutoChara.value() == MACHINE_AUTO) isAuto = true;
   else isAuto = false;
   Serial.println(isAuto);
 }
 
 void changeRunState() {
   if(!isAuto) {
-    motorLeftSpeed = setLeftSpeed;
-    motorRightSpeed = setRightSpeed;
+    leftSpeed = setLeftSpeed;
+    rightSpeed = setRightSpeed;
   }
   Serial.print("left : ");
-  Serial.print(motorLeftSpeed);
+  Serial.print(leftSpeed);
   Serial.print(", ");
   Serial.print("right : ");
-  Serial.println(motorRightSpeed);
+  Serial.println(rightSpeed);
 
   switch (motorState) {
     case MOTOR_STOP:
@@ -459,18 +549,18 @@ void changeRunState() {
       break;
     case MOTOR_RUN:
       if(isAdjusted || !isAuto) {
-        motorRun(motorLeftSpeed,motorRightSpeed);
+        motorRun(leftSpeed,rightSpeed);
       }
       break;
-    case MOTOR_RIGHTTURN:
-      motorRight(motorLeftSpeed,motorRightSpeed);
+    case MACHINE_RIGHTTURN:
+      motorRight(leftSpeed,rightSpeed);
       break;
-    case MOTOR_LEFTTURN:
-      motorLeft(motorLeftSpeed,motorRightSpeed);
+    case MACHINE_LEFTTURN:
+      motorLeft(leftSpeed,rightSpeed);
       break;
-    case MOTOR_BACKWARD:
+    case MACHINE_BACKWARD:
       if(isAdjusted || !isAuto) {
-        motorBack(motorLeftSpeed,motorRightSpeed);        
+        motorBack(leftSpeed,rightSpeed);        
       }
       break;
     default:
