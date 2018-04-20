@@ -5,11 +5,6 @@
 #define SHIELD_V1
 //#define MADGWICK
 
-#ifdef MADGWICK
-#include <MadgwickAHRS.h>
-Madgwick filter;
-#endif
-
 #ifdef SHIELD_V1
 #define MOTOR_RIGHT 5  //H-Bridge M4
 #define MOTOR_LEFT  6    //H-Bridge M3
@@ -29,6 +24,11 @@ Adafruit_DCMotor *motor2 = AFMS.getMotor(4);
 #define PIN_DATA 8
 #define PIN_CLOCK 4
 #define PIN_LATCH 12
+#endif
+
+#ifdef MADGWICK
+#include <MadgwickAHRS.h>
+Madgwick filter;
 #endif
 
 #define MACHINE_AUTO  1
@@ -65,7 +65,7 @@ char machineState[30];
 
 const int timeBLE = 1000000;
 const int timeIMU = 4;
-const int adjustSpeed = 50;
+const int adjustSpeed = 100;
 const int range = 3;
 const int base = 10;
 
@@ -207,7 +207,7 @@ void readIMU() {
   CurieIMU.readGyro(gx, gy, gz);
   CurieIMU.readAccelerometer(ax, ay, az); 
 
-  accel_x = ax - baseAx;  accel_y = ay - baseAy;  accel_z = (az - baseAz) + 16384;
+  accel_x = (ax - baseAx);  accel_y = (ay - baseAy) + 16384;  accel_z = (az - baseAz);
 
   accel_xz = sqrt(pow(accel_x, 2) + pow(accel_z, 2));
   accel_angle_pitch = atan(accel_y / accel_xz) * RADIANS_TO_DEGREES;
@@ -227,8 +227,11 @@ void readIMU() {
   
   filtered_angle_roll = (ALPHA * (filtered_angle_roll + gyro_angle_roll)) + ((1.0 - ALPHA) * accel_angle_roll);
   filtered_angle_pitch = (ALPHA * (filtered_angle_pitch + gyro_angle_pitch)) + ((1.0 - ALPHA) * accel_angle_pitch);
-//  filtered_angle_yaw = (ALPHA * (filtered_angle_yaw + gyro_angle_yaw)) + ((1.0 - ALPHA) * accel_angle_yaw);
   filtered_angle_yaw += gyro_angle_yaw;
+
+  filtered_angle_roll = angle360(filtered_angle_roll);
+  filtered_angle_pitch = angle360(filtered_angle_pitch);
+  filtered_angle_yaw = angle360(filtered_angle_yaw);
 
   // data check
 /*  
@@ -248,11 +251,17 @@ void readIMU() {
   String strAngleZ = String(filtered_angle_yaw, 3);
 */
 
-  String strAngleX = String(gyro_z);
-  String strAngleY = String(gyro_angle_yaw, 3);
-  String strAngleZ = String(filtered_angle_yaw, 3);
+  String strAngleX = String(gyro_x);
+  String strAngleY = String(gyro_angle_roll, 3);
+  String strAngleZ = String(filtered_angle_roll, 3);
   String sendData = String(strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   Serial.println(sendData);
+}
+
+float angle360(float angle) {
+  if(angle < -360) angle += 360;
+  else if(angle > 360) angle -= 360;
+  return angle;
 }
 
 #ifdef MADGWICK
@@ -381,8 +390,8 @@ void motorLeft(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, vl/2);
-  analogWrite(MOTOR_RIGHT, vr/2);
+  analogWrite(MOTOR_LEFT, vl);
+  analogWrite(MOTOR_RIGHT, vr);
 #endif
   Serial.print("Motor Left : ");
   Serial.println(dir);
@@ -404,26 +413,14 @@ void motorRight(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, vl/2);
-  analogWrite(MOTOR_RIGHT, vr/2);
+  analogWrite(MOTOR_LEFT, vl);
+  analogWrite(MOTOR_RIGHT, vr);
 #endif
   Serial.print("Motor Right : ");
   Serial.println(dir);
   machineDirection = MACHINE_RIGHTTURN;
   motorState = MACHINE_RIGHTTURN;
 }
-
-#ifndef SHIELD_V2
-void changeDirection(byte d) {
-  digitalWrite(PIN_LATCH, LOW);
-  Serial.println("Shift Register Latch Low");
-  shiftOut(PIN_DATA, PIN_CLOCK, LSBFIRST, d);
-  Serial.println(d);
-  digitalWrite(PIN_LATCH, HIGH);
-  Serial.println("Shift Register Latch High (Hold)");
-  delay(500);
-}
-#endif
 
 void initBLE() {
   BLE.begin();
@@ -480,7 +477,7 @@ void initIMU() {
     Serial.println(data);
     delay(50);
   } 
-/*
+/*// IMU 초기값 
   Serial.println("average");
   baseGx = tmpGx/base;  baseGy = tmpGy/base;  baseGz = tmpGz/base;
   baseAx = tmpAx/base;  baseAy = tmpAy/base;  baseAz = tmpAz/base;
@@ -532,6 +529,18 @@ void isAutoCharacteristicWritten(BLEDevice central, BLECharacteristic characteri
   Serial.println(isAuto);
 }
 
+#ifndef SHIELD_V2
+void changeDirection(byte d) {
+  digitalWrite(PIN_LATCH, LOW);
+  Serial.println("Shift Register Latch Low");
+  shiftOut(PIN_DATA, PIN_CLOCK, LSBFIRST, d);
+  Serial.println(d);
+  digitalWrite(PIN_LATCH, HIGH);
+  Serial.println("Shift Register Latch High (Hold)");
+  delay(500);
+}
+#endif
+
 void changeRunState() {
   if(!isAuto) {
     leftSpeed = setLeftSpeed;
@@ -568,3 +577,4 @@ void changeRunState() {
       break;
   }
 }
+
