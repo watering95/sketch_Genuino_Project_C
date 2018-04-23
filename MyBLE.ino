@@ -82,5 +82,6 @@ void isAutoCharacteristicWritten(BLEDevice central, BLECharacteristic characteri
   Serial.print("isAutoCharacteristic event, written : ");
   if(isAutoChara.value() == MACHINE_AUTO) isAuto = true;
   else isAuto = false;
+  initIMU();
   Serial.println(isAuto);
 }

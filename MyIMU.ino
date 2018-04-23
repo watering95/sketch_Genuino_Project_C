@@ -2,7 +2,9 @@
 
 void initIMU() {
   String data; 
-  int tmpGx = 0, tmpGy = 0, tmpGz = 0, tmpAx = 0, tmpAy = 0, tmpAz = 0;
+  float tmp_roll = 0, tmp_pitch = 0, tmp_yaw = 0;
+  int tmp_ax = 0, tmp_ay = 0, tmp_az = 0;
+  int tmp_gx = 0, tmp_gy = 0, tmp_gz = 0;
   
   Serial.println("Initializing IMU device..."); 
   CurieIMU.begin(); 
@@ -16,26 +18,29 @@ void initIMU() {
   #ifdef MADGWICK
   filter.begin(25);
   #endif
-  
+
   for(int i=0; i < base; i++) {
     CurieIMU.readGyro(gx, gy, gz);
-    CurieIMU.readAccelerometer(ax, ay, az);
-    tmpGx += gx;    tmpGy += gy;    tmpGz += gz;
-    tmpAx += ax;    tmpAy += ay;    tmpAz += az;
+    CurieIMU.readAccelerometer(ax, ay, az); 
+    tmp_ax += ax;    tmp_ay += ay;    tmp_az += az;
+    tmp_gx += gx;    tmp_gy += gy;    tmp_gz += gz;
     delay(50);
-/*
-    data = String(String(tmpGx) + "," + String(tmpGy) + "," + String(tmpGz) + "," + String(tmpAx) + "," + String(tmpAy) + "," + String(tmpAz) + ",");
-    Serial.println(data);
-*/
   }  
+  base_ax = tmp_ax / base;  base_ay = tmp_ay / base;  base_az = tmp_az / base;
+  base_gx = tmp_gx / base;  base_gy = tmp_gy / base;  base_gz = tmp_gz / base;
+  
+  for(int i=0; i < base; i++) {
+    readIMU();
+    tmp_roll += filtered_angle_roll;
+    tmp_pitch += filtered_angle_pitch;
+    tmp_yaw += filtered_angle_yaw;
+    delay(50);
+  }  
+  base_roll = tmp_roll / base;
+  base_yaw = tmp_yaw / base;
+  base_pitch = tmp_pitch / base;
 
-/*// IMU 초기값 
-  Serial.println("average");
-  baseGx = tmpGx/base;  baseGy = tmpGy/base;  baseGz = tmpGz/base;
-  baseAx = tmpAx/base;  baseAy = tmpAy/base;  baseAz = tmpAz/base;
-  data = String(String(baseGx) + "," + String(baseGy) + "," + String(baseGz) + "," + String(baseAx) + "," + String(baseAy) + "," + String(baseAz) + ",");
-  Serial.println(data);
-*/
+  if(az < 10000) base_roll += 90;
 } 
 
 void readIMU() {
@@ -54,7 +59,6 @@ void readIMU() {
 
   float accel_angle_roll = 0;
   float accel_angle_pitch = 0;
-  float accel_angle_yaw = 0;
 
   float gyro_angle_roll = 0;
   float gyro_angle_pitch = 0;
@@ -63,7 +67,7 @@ void readIMU() {
   CurieIMU.readGyro(gx, gy, gz);
   CurieIMU.readAccelerometer(ax, ay, az); 
 
-  accel_x = (ax - baseAx);  accel_y = (ay - baseAy);  accel_z = (az - baseAz) + 16384;
+  accel_x = (ax - base_ax);  accel_y = (ay - base_ay);  accel_z = (az - base_az);
 
   accel_xz = sqrt(pow(accel_x, 2) + pow(accel_z, 2));
   accel_angle_roll = atan(accel_y / accel_xz) * RADIANS_TO_DEGREES;
@@ -71,9 +75,9 @@ void readIMU() {
   accel_yz = sqrt(pow(accel_y, 2) + pow(accel_z, 2));
   accel_angle_pitch = atan(accel_x / accel_yz) * RADIANS_TO_DEGREES;
 
-  gyro_x = (gx - baseGx) / GYROXYZ_TO_DEGREES_PER_SEC;
-  gyro_y = (gy - baseGy) / GYROXYZ_TO_DEGREES_PER_SEC;
-  gyro_z = (gz - baseGz) / GYROXYZ_TO_DEGREES_PER_SEC - 1;
+  gyro_x = (gx - base_gx) / GYROXYZ_TO_DEGREES_PER_SEC;
+  gyro_y = (gy - base_gy) / GYROXYZ_TO_DEGREES_PER_SEC;
+  gyro_z = (gz - base_gz) / GYROXYZ_TO_DEGREES_PER_SEC - 1;
 
   gyro_angle_roll = gyro_x * dt / 1000.0;
   gyro_angle_pitch = 0 - gyro_y * dt / 1000.0;
@@ -84,30 +88,9 @@ void readIMU() {
   filtered_angle_yaw += gyro_angle_yaw;
 
   filtered_angle_roll = angle360(filtered_angle_roll);
-  angle_roll = filtered_angle_roll + 1.68 + 25 - 77;
   filtered_angle_pitch = angle360(filtered_angle_pitch);
-  angle_pitch = filtered_angle_pitch + 4.71;
   filtered_angle_yaw = angle360(filtered_angle_yaw);
-  angle_yaw = filtered_angle_yaw;
-
-  // data check
-/*
-  String strAngleX = String(gyro_angle_roll, 3);
-  String strAngleY = String(gyro_angle_pitch, 3);
-  String strAngleZ = String(gyro_angle_yaw, 3);
-*/
-
 #endif
-/*  
-  String strAngleX = String(0);
-  String strAngleY = String(0);
-  String strAngleZ = String(gyro_z);
-  String strAngleX = String(filtered_angle_roll, 3);
-  String strAngleY = String(filtered_angle_pitch, 3);
-  String strAngleZ = String(filtered_angle_yaw, 3);
-  String sendData = String(strAngleX + "," + strAngleY + "," + strAngleZ + ",");
-  Serial.println(sendData);
-*/
 }
 
 #ifdef MADGWICK // Madgwick 사용 

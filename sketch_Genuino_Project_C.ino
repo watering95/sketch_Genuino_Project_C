@@ -11,27 +11,6 @@
 unsigned int machineDirection = MACHINE_FORWARD;
 unsigned int motorState = MOTOR_STOP;
 
-const int timeBLE = 1000000;
-const int timeIMU = 200; //ms
-const int adjustSpeed = 100;
-const int range = 3;
-const int base = 20;
-
-int gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0; //RAW값
-int baseGx = 0, baseGy = 0, baseGz = 0, baseAx = 0, baseAy = 0, baseAz = 0; //초기값
-
-float filtered_angle_roll = 0;
-float filtered_angle_pitch = 0;
-float filtered_angle_yaw = 0;
-
-float angle_roll = 0;
-float angle_pitch = 0;
-float angle_yaw = 0;
-
-int controlAngle;
-int prevTime = 0, nowTime = 0;
-float dt = 0.0;
-
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -39,7 +18,7 @@ void setup() {
   initMotorShield();
   prevTime = millis();
   initIMU();
-
+  
   CurieTimerOne.start(timeBLE, &sendBLE); 
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -53,6 +32,11 @@ void loop() {
   dt = nowTime - prevTime;
   if(dt > timeIMU) {
     readIMU();
+
+    angle_yaw = filtered_angle_yaw - base_yaw;
+    angle_pitch = filtered_angle_pitch - base_pitch;
+    angle_roll = filtered_angle_roll - base_roll;
+
     prevTime = nowTime;
   }
   if(isAuto) autoRun();
@@ -106,18 +90,16 @@ void autoRun() {
 void changeMotorAngle() {
   switch(machineDirection) {
     case MACHINE_FORWARD:
-      controlAngle = filtered_angle_yaw;
+      controlAngle = angle_yaw;
       break;
     case MACHINE_BACKWARD:
-      controlAngle = filtered_angle_yaw;
+      controlAngle = angle_yaw;
       break;
     case MACHINE_LEFTTURN:
-      controlAngle = filtered_angle_yaw - 90;
+      controlAngle = angle_yaw - 90;
       break;
     case MACHINE_RIGHTTURN:
-      controlAngle = filtered_angle_yaw + 90;
+      controlAngle = angle_yaw + 90;
       break;
   }  
-  if(controlAngle < 0) controlAngle += 360;
-  else if(controlAngle > 360) controlAngle -= 360;
 }
