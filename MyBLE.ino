@@ -9,10 +9,10 @@ void initBLE() {
   machineService.addCharacteristic(machineStateChara);
   
   BLE.setAdvertisedService(motorService);
-  motorService.addCharacteristic(stateChara);
+  motorService.addCharacteristic(operateChara);
   motorService.addCharacteristic(speedLeftChara);
   motorService.addCharacteristic(speedRightChara);
-  motorService.addCharacteristic(isAutoChara);
+  motorService.addCharacteristic(modeChara);
 
   BLE.addService(machineService);
   BLE.addService(motorService);
@@ -20,10 +20,10 @@ void initBLE() {
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
 
-  stateChara.setEventHandler(BLEWritten, stateCharacteristicWritten);
+  operateChara.setEventHandler(BLEWritten, operateCharacteristicWritten);
   speedLeftChara.setEventHandler(BLEWritten, speedLeftCharacteristicWritten);
   speedRightChara.setEventHandler(BLEWritten, speedRightCharacteristicWritten);
-  isAutoChara.setEventHandler(BLEWritten, isAutoCharacteristicWritten);
+  modeChara.setEventHandler(BLEWritten, modeCharacteristicWritten);
   
   BLE.advertise();
   Serial.println("BLE Genuino101 Peripheral");
@@ -32,13 +32,13 @@ void initBLE() {
 void sendBLE() {
   if(!isConnectedCentral) return;
   
-  String strState = String(motorState);
+  String strState = String(state);
   String strAngleX = String(filtered_angle_roll, 1);
   String strAngleY = String(filtered_angle_pitch, 1);
   String strAngleZ = String(filtered_angle_yaw, 1);
   String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
-//  Serial.println(machineState);
+
   machineStateChara.setValue(machineState);
 }
 
@@ -59,7 +59,7 @@ void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic charact
   setLeftSpeed = speedLeftChara.value();
   Serial.println(setLeftSpeed);
 
-  changeRunState();
+  changeOperate();
 }
 
 void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
@@ -67,21 +67,21 @@ void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic charac
   setRightSpeed = speedRightChara.value();
   Serial.println(setRightSpeed);
 
-  changeRunState();
+  changeOperate();
 }
 
-void stateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("directionCharacteristic event, written : ");
-  motorState = stateChara.value();
-  Serial.println(machineDirection);
+void operateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  Serial.print("operateCharacteristic event, written : ");
+  operate = operateChara.value();
+  Serial.println(operate);
 
-  changeRunState();
+  changeOperate();
 }
 
-void isAutoCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+void modeCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("isAutoCharacteristic event, written : ");
-  if(isAutoChara.value() == MACHINE_AUTO) isAuto = true;
-  else isAuto = false;
+  if(modeChara.value() == MODE_AUTO) mode = MODE_AUTO;
+  else mode = MODE_MANUAL;
   initIMU();
-  Serial.println(isAuto);
+  Serial.println(mode);
 }

@@ -21,7 +21,7 @@ void initMotorShield() {
 #endif
 }
 
-void motorBack(unsigned int vl, unsigned int vr) {  
+void runBackward(unsigned int vl, unsigned int vr) {  
 #ifdef SHIELD_V2
   motor1->run(BACKWARD);
   motor2->run(BACKWARD);
@@ -35,14 +35,13 @@ void motorBack(unsigned int vl, unsigned int vr) {
 #endif  
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_RIGHT, vr);
-  analogWrite(MOTOR_LEFT, vl);
+  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Back : ");
   Serial.println(dir);
 }
 
-void motorStop() {
+void Stop() {
 #ifdef SHIELD_V2
   motor1->run(RELEASE);
   motor2->run(RELEASE);
@@ -60,7 +59,7 @@ void motorStop() {
   Serial.println(dir);
 }
 
-void motorRun(unsigned int vl, unsigned int vr) {
+void runForward(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
@@ -74,14 +73,13 @@ void motorRun(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_RIGHT, vr);
-  analogWrite(MOTOR_LEFT, vl);
+  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Run : ");
   Serial.println(dir);
 }
 
-void motorLeft(unsigned int vl, unsigned int vr) {
+void leftTurn(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
@@ -95,14 +93,13 @@ void motorLeft(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, vl);
-  analogWrite(MOTOR_RIGHT, vr);
+  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Left : ");
   Serial.println(dir);
 }
 
-void motorRight(unsigned int vl, unsigned int vr) {
+void rightTurn(unsigned int vl, unsigned int vr) {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
@@ -116,59 +113,49 @@ void motorRight(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
-  analogWrite(MOTOR_LEFT, vl);
-  analogWrite(MOTOR_RIGHT, vr);
+  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Right : ");
   Serial.println(dir);
 }
 
-void changeRunState() {
-  if(!isAuto) {
+void motorSpeedControl(unsigned int vl, unsigned int vr) {
+  int increase_millisec = 1000;
+  for(int i = 0; i < increase_millisec; i++) {
+    analogWrite(MOTOR_LEFT, vl * (i / increase_millisec));
+    analogWrite(MOTOR_RIGHT, vr * (i / increase_millisec));
+    delay(increase_millisec);
+  }
+}
+
+void changeOperate() {
+  if(mode == MODE_MANUAL) {
     leftSpeed = setLeftSpeed;
     rightSpeed = setRightSpeed;
   }
-  Serial.print("left : ");
-  Serial.print(leftSpeed);
-  Serial.print(", ");
-  Serial.print("right : ");
-  Serial.println(rightSpeed);
 
-  switch (motorState) {
-    case MOTOR_STOP:
-      motorStop();
-      machineDirection = MACHINE_FORWARD;
-      motorState = MOTOR_STOP;
+  switch (operate) {
+    case OPERATE_FORWARD:
+      runForward(leftSpeed,rightSpeed);
+      state = STATE_FORWARD;
       break;
-    case MOTOR_RUN:
-      if(isAdjusted || !isAuto) {
-        motorRun(leftSpeed,rightSpeed);
-        machineDirection = MACHINE_FORWARD;
-        motorState = MOTOR_RUN;
-      }
+    case OPERATE_RIGHTTURN:
+      rightTurn(leftSpeed,rightSpeed);
+      state = STATE_RIGHTTURN;
       break;
-    case MACHINE_RIGHTTURN:
-      motorRight(leftSpeed,rightSpeed);
-      machineDirection = MACHINE_RIGHTTURN;
-      motorState = MACHINE_RIGHTTURN;
+    case OPERATE_LEFTTURN:
+      leftTurn(leftSpeed,rightSpeed);
+      state = STATE_LEFTTURN;
       break;
-    case MACHINE_LEFTTURN:
-      motorLeft(leftSpeed,rightSpeed);
-      machineDirection = MACHINE_LEFTTURN;
-      motorState = MACHINE_LEFTTURN;
+    case OPERATE_BACKWARD:
+      runBackward(leftSpeed,rightSpeed);       
+      state = STATE_BACKWARD;
       break;
-    case MACHINE_BACKWARD:
-      if(isAdjusted || !isAuto) {
-        motorBack(leftSpeed,rightSpeed);
-        machineDirection = MACHINE_BACKWARD;
-        motorState = MACHINE_BACKWARD;        
-      }
-      break;
+    case OPERATE_STOP:
     default:
-      motorStop();
-      machineDirection = MACHINE_FORWARD;
-      motorState = MOTOR_STOP;
-      break;
+      Stop();
+      state = STATE_STOP;
+      break;  
   }
 }
 
@@ -181,6 +168,3 @@ void changeDirection(byte d) {
   Serial.println("Shift Register Latch High (Hold)");
   delay(500);
 }
-
-
-

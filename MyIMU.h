@@ -13,3 +13,5 @@ float convertRawGyro(int);
 void initIMU();
 void readIMU();
 float angle360(float);
+
+void sendToProcessing();

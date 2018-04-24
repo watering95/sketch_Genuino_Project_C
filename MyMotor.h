@@ -19,16 +19,13 @@ Adafruit_DCMotor *motor2 = AFMS.getMotor(4);
 #define PIN_LATCH 12
 #endif
 
-#define MOTOR_STOP  0
-#define MOTOR_RUN   1
-
 void initMotorShield();
-void changeRunState();
-void motorBack(unsigned int, unsigned int);
-void motorRun(unsigned int, unsigned int);
-void motorRight(unsigned int, unsigned int);
-void motorLeft(unsigned int, unsigned int);
-void motorStop(unsigned int, unsigned int);
+void changeOperate();
+void runBackward(unsigned int, unsigned int);
+void runForward(unsigned int, unsigned int);
+void rightTurn(unsigned int, unsigned int);
+void leftTurn(unsigned int, unsigned int);
+void Stop(unsigned int, unsigned int);
 
 #ifndef SHIELD_V2
 void changeDirection(byte);

@@ -8,11 +8,15 @@
 //#define MADGWICK
 #define PROCESSING
 
-unsigned int machineDirection = MACHINE_FORWARD;
-unsigned int motorState = MOTOR_STOP;
+unsigned int operate = OPERATE_FORWARD;
+unsigned int state = STATE_STOP;
+unsigned int mode = MODE_MANUAL;
+
+const int adjustSpeed = 100;
+const int angleRange = 3;
+const int base = 30;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(9600);
   initBLE();
   initMotorShield();
@@ -25,7 +29,6 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   BLE.poll();
 
   nowTime = millis();
@@ -39,66 +42,62 @@ void loop() {
 
     prevTime = nowTime;
   }
-  if(isAuto) autoRun();
+  if(mode == MODE_AUTO) autoRun();
+  
 #ifdef PROCESSING  
-  Serial.print("Orientation: ");
-  Serial.print(angle_yaw);
-  Serial.print(" ");
-  Serial.print(angle_pitch);
-  Serial.print(" ");
-  Serial.println(angle_roll);
+  sendToProcessing();
 #endif
 }
 
 void autoRun() {
   changeMotorAngle();
-  if(controlAngle < range) {
-     if(motorState == MOTOR_RUN) {
+  if(controlAngle < angleRange) {
+     if(state == STATE_STOP) {
+       leftTurn(adjustSpeed, adjustSpeed);
+     }
+     else {
        leftSpeed = setLeftSpeed + adjustSpeed;
        rightSpeed = setRightSpeed - adjustSpeed;
      }
-     else {
-       motorLeft(adjustSpeed, adjustSpeed);
-     }
      isAdjusted = false;
   }
-  else if(controlAngle > -range) {
-     if(motorState == MOTOR_RUN) {
-       leftSpeed = setLeftSpeed - adjustSpeed;
-       rightSpeed = setRightSpeed + adjustSpeed;
+  else if(controlAngle > -angleRange) {
+     if(state == STATE_STOP) {
+       rightTurn(adjustSpeed, adjustSpeed);
      }
      else {
-       motorRight(adjustSpeed, adjustSpeed);
+       leftSpeed = setLeftSpeed - adjustSpeed;
+       rightSpeed = setRightSpeed + adjustSpeed;
      }
      isAdjusted = false;
   }
   else {
-     if(motorState == MOTOR_RUN) {
-       leftSpeed = setLeftSpeed;
-       rightSpeed = setRightSpeed;
+     if(state == STATE_STOP) {
+       Stop();
      }
      else {
-       motorStop();
+       leftSpeed = setLeftSpeed;
+       rightSpeed = setRightSpeed;
      }
 
     isAdjusted = true;
   }
 
-  if(motorState == MOTOR_RUN) changeRunState();
+  if(state != STATE_STOP) changeOperate();
 }
 
 void changeMotorAngle() {
-  switch(machineDirection) {
-    case MACHINE_FORWARD:
+  switch(operate) {
+    case OPERATE_FORWARD:
       controlAngle = angle_yaw;
       break;
-    case MACHINE_BACKWARD:
+    case OPERATE_BACKWARD:
       controlAngle = angle_yaw;
       break;
-    case MACHINE_LEFTTURN:
+    case OPERATE_LEFTTURN:
       controlAngle = angle_yaw - 90;
       break;
-    case MACHINE_RIGHTTURN:
+    case OPERATE_RIGHTTURN:
       controlAngle = angle_yaw + 90;
       break;
   }  

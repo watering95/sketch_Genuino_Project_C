@@ -132,3 +132,13 @@ float angle360(float angle) {
   else if(angle > 360) angle -= 360;
   return angle;
 }
+
+void sendToProcessing() {
+  Serial.print("Orientation: ");
+  Serial.print(angle_yaw);
+  Serial.print(" ");
+  Serial.print(angle_pitch);
+  Serial.print(" ");
+  Serial.println(angle_roll);
+}
+
