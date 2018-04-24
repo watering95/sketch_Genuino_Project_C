@@ -5,8 +5,7 @@
 #include "./MyIMU.h"
 
 #define SHIELD_V1
-//#define MADGWICK
-#define PROCESSING
+//#define PROCESSING
 
 unsigned int operate = OPERATE_FORWARD;
 unsigned int state = STATE_STOP;

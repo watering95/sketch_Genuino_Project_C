@@ -120,11 +120,11 @@ void rightTurn(unsigned int vl, unsigned int vr) {
 }
 
 void motorSpeedControl(unsigned int vl, unsigned int vr) {
-  int increase_millisec = 1000;
+  int increase_millisec = 10;
   for(int i = 0; i < increase_millisec; i++) {
-    analogWrite(MOTOR_LEFT, vl * (i / increase_millisec));
-    analogWrite(MOTOR_RIGHT, vr * (i / increase_millisec));
-    delay(increase_millisec);
+    analogWrite(MOTOR_LEFT, (vl * i) / increase_millisec);
+    analogWrite(MOTOR_RIGHT, (vr * i) / increase_millisec);
+    delay(increase_millisec*10);
   }
 }
 

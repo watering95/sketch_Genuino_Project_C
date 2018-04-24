@@ -34,20 +34,18 @@ void initIMU() {
     tmp_roll += filtered_angle_roll;
     tmp_pitch += filtered_angle_pitch;
     tmp_yaw += filtered_angle_yaw;
+    
     delay(50);
   }  
   base_roll = tmp_roll / base;
   base_yaw = tmp_yaw / base;
   base_pitch = tmp_pitch / base;
 
-  if(az < 10000) base_roll += 90;
+  if(az < -10000) base_roll -= 180;
+  else base_roll += 90;
 } 
 
 void readIMU() {
-#ifdef MADGWICK // Madgwick 사용 
-  readIMUWithMadgwick();
-
-#else // Madgwick 미사용
   const float RADIANS_TO_DEGREES = 180/3.14159;
   const float GYROXYZ_TO_DEGREES_PER_SEC = 131.0;
   const float ALPHA = 0.96; // 입력주기 0.04, 시간상수 1
@@ -90,41 +88,6 @@ void readIMU() {
   filtered_angle_roll = angle360(filtered_angle_roll);
   filtered_angle_pitch = angle360(filtered_angle_pitch);
   filtered_angle_yaw = angle360(filtered_angle_yaw);
-#endif
-}
-
-#ifdef MADGWICK // Madgwick 사용 
-void readIMUWithMadgwick() {
-  float accel_x = 0, accel_y = 0, accel_z = 0;
-  float gyro_x = 0, gyro_y = 0, gyro_z = 0;
-  
-  CurieIMU.readGyro(gx, gy, gz);
-  CurieIMU.readAccelerometer(ax, ay, az); 
-
-  accel_x = convertRawAcceleration(ax);
-  accel_y = convertRawAcceleration(ay);
-  accel_z = convertRawAcceleration(az);
-
-  gyro_x = convertRawGyro(gx);
-  gyro_y = convertRawGyro(gy);
-  gyro_z = convertRawGyro(gz);
-
-  filter.updateIMU(accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z);
-
-  filtered_angle_roll = filter.getRoll();
-  filtered_angle_pitch = filter.getPitch();
-  filtered_angle_yaw = filter.getYaw();
-}
-#endif
-
-float convertRawAcceleration(int raw) {
-  float a = (raw * 2.0) / 32768.0;
-  return a;  
-}
-
-float convertRawGyro(int raw) {
-  float g = (raw * 250.0) / 32768.0;
-  return g;
 }
 
 float angle360(float angle) {

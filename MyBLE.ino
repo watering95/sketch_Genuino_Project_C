@@ -39,6 +39,7 @@ void sendBLE() {
   String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
 
+  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
