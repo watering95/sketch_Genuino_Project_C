@@ -21,7 +21,62 @@ void initMotorShield() {
 #endif
 }
 
-void runBackward(unsigned int vl, unsigned int vr) {  
+void changeSpeed(int change_millisec, unsigned int vl, unsigned int vr) {
+  unsigned int change_vr = vr - now_vr;
+  unsigned int change_vl = vl - now_vl;
+  
+  if(operate == OPERATE_STOP) {
+    now_vr = 0;
+    now_vl = 0;
+    return;
+  }
+  
+  for(int i = 1, limit = change_millisec + 1; i < limit; i++) {
+    analogWrite(MOTOR_LEFT, now_vl + (change_vl * i) / limit);
+    analogWrite(MOTOR_RIGHT, now_vr + (change_vr * i) / limit);
+    delay(change_millisec*10);
+  }
+  now_vr = vr;
+  now_vl = vl;
+}
+
+void changeDirection(byte d) {
+  digitalWrite(PIN_LATCH, LOW);
+  Serial.println("Shift Register Latch Low");
+  shiftOut(PIN_DATA, PIN_CLOCK, LSBFIRST, d);
+  Serial.println(d);
+  digitalWrite(PIN_LATCH, HIGH);
+  Serial.println("Shift Register Latch High (Hold)");
+  delay(500);
+}
+
+void manualOperate() {
+  switch (operate) {
+    case OPERATE_FORWARD:
+      runForward();
+      state = STATE_FORWARD;
+      break;
+    case OPERATE_RIGHTTURN:
+      rightTurn();
+      state = STATE_RIGHTTURN;
+      break;
+    case OPERATE_LEFTTURN:
+      leftTurn();
+      state = STATE_LEFTTURN;
+      break;
+    case OPERATE_BACKWARD:
+      runBackward();       
+      state = STATE_BACKWARD;
+      break;
+    case OPERATE_STOP:
+    default:
+      Stop();
+      state = STATE_STOP;
+      break;  
+  }
+}
+
+void runBackward() {  
 #ifdef SHIELD_V2
   motor1->run(BACKWARD);
   motor2->run(BACKWARD);
@@ -35,7 +90,6 @@ void runBackward(unsigned int vl, unsigned int vr) {
 #endif  
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Back : ");
   Serial.println(dir);
@@ -59,7 +113,7 @@ void Stop() {
   Serial.println(dir);
 }
 
-void runForward(unsigned int vl, unsigned int vr) {
+void runForward() {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
@@ -73,13 +127,12 @@ void runForward(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Run : ");
   Serial.println(dir);
 }
 
-void leftTurn(unsigned int vl, unsigned int vr) {
+void leftTurn() {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
@@ -93,13 +146,12 @@ void leftTurn(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
-  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Left : ");
   Serial.println(dir);
 }
 
-void rightTurn(unsigned int vl, unsigned int vr) {
+void rightTurn() {
 #ifdef SHIELD_V2
   motor1->setSpeed(vl);
   motor2->setSpeed(vr);
@@ -113,58 +165,7 @@ void rightTurn(unsigned int vl, unsigned int vr) {
 #endif
   digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
-  motorSpeedControl(vl, vr);
 #endif
   Serial.print("Motor Right : ");
   Serial.println(dir);
-}
-
-void motorSpeedControl(unsigned int vl, unsigned int vr) {
-  int increase_millisec = 10;
-  for(int i = 0; i < increase_millisec; i++) {
-    analogWrite(MOTOR_LEFT, (vl * i) / increase_millisec);
-    analogWrite(MOTOR_RIGHT, (vr * i) / increase_millisec);
-    delay(increase_millisec*10);
-  }
-}
-
-void changeOperate() {
-  if(mode == MODE_MANUAL) {
-    leftSpeed = setLeftSpeed;
-    rightSpeed = setRightSpeed;
-  }
-
-  switch (operate) {
-    case OPERATE_FORWARD:
-      runForward(leftSpeed,rightSpeed);
-      state = STATE_FORWARD;
-      break;
-    case OPERATE_RIGHTTURN:
-      rightTurn(leftSpeed,rightSpeed);
-      state = STATE_RIGHTTURN;
-      break;
-    case OPERATE_LEFTTURN:
-      leftTurn(leftSpeed,rightSpeed);
-      state = STATE_LEFTTURN;
-      break;
-    case OPERATE_BACKWARD:
-      runBackward(leftSpeed,rightSpeed);       
-      state = STATE_BACKWARD;
-      break;
-    case OPERATE_STOP:
-    default:
-      Stop();
-      state = STATE_STOP;
-      break;  
-  }
-}
-
-void changeDirection(byte d) {
-  digitalWrite(PIN_LATCH, LOW);
-  Serial.println("Shift Register Latch Low");
-  shiftOut(PIN_DATA, PIN_CLOCK, LSBFIRST, d);
-  Serial.println(d);
-  digitalWrite(PIN_LATCH, HIGH);
-  Serial.println("Shift Register Latch High (Hold)");
-  delay(500);
 }

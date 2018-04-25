@@ -20,12 +20,13 @@ Adafruit_DCMotor *motor2 = AFMS.getMotor(4);
 #endif
 
 void initMotorShield();
-void changeOperate();
-void runBackward(unsigned int, unsigned int);
-void runForward(unsigned int, unsigned int);
-void rightTurn(unsigned int, unsigned int);
-void leftTurn(unsigned int, unsigned int);
-void Stop(unsigned int, unsigned int);
+void manualOperate();
+void changeSpeed(int, unsigned int, unsigned int);
+void runBackward();
+void runForward();
+void rightTurn();
+void leftTurn();
+void Stop();
 
 #ifndef SHIELD_V2
 void changeDirection(byte);

@@ -60,7 +60,10 @@ void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic charact
   setLeftSpeed = speedLeftChara.value();
   Serial.println(setLeftSpeed);
 
-  changeOperate();
+  if(setLeftSpeed < 150) setLeftSpeed = 150;
+  if(now_vr < 150) now_vr = 150;
+
+  changeSpeed(10, setLeftSpeed, now_vr);
 }
 
 void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
@@ -68,7 +71,10 @@ void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic charac
   setRightSpeed = speedRightChara.value();
   Serial.println(setRightSpeed);
 
-  changeOperate();
+  if(setRightSpeed < 150) setRightSpeed = 150;
+  if(now_vl < 150) now_vl = 150;
+
+  changeSpeed(10, now_vl, setRightSpeed);
 }
 
 void operateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
@@ -76,13 +82,19 @@ void operateCharacteristicWritten(BLEDevice central, BLECharacteristic character
   operate = operateChara.value();
   Serial.println(operate);
 
-  changeOperate();
+  if(mode == MODE_MANUAL) {
+    manualOperate();
+    changeSpeed(10, setLeftSpeed, setRightSpeed);
+  }
 }
 
 void modeCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("isAutoCharacteristic event, written : ");
+  Serial.print("modeCharacteristic event, written : ");
   if(modeChara.value() == MODE_AUTO) mode = MODE_AUTO;
-  else mode = MODE_MANUAL;
+  else {
+    mode = MODE_MANUAL;
+    Stop();
+  }
   initIMU();
   Serial.println(mode);
 }
