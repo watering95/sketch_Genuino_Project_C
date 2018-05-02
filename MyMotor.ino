@@ -24,16 +24,22 @@ void initMotorShield() {
 void changeSpeed(int change_millisec, unsigned int vl, unsigned int vr) {
   unsigned int change_vr = vr - now_vr;
   unsigned int change_vl = vl - now_vl;
-  
-  if(operate == OPERATE_STOP) {
-    now_vr = 0;
-    now_vl = 0;
-    return;
-  }
+  unsigned int out_left, out_right;
   
   for(int i = 1, limit = change_millisec + 1; i < limit; i++) {
-    analogWrite(MOTOR_LEFT, now_vl + (change_vl * i) / limit);
-    analogWrite(MOTOR_RIGHT, now_vr + (change_vr * i) / limit);
+    out_left = now_vl + (change_vl * i) / limit;
+    out_right = now_vr + (change_vr * i) / limit;
+    
+    Serial.print(i);
+    Serial.print(",");
+    Serial.print(limit);
+    Serial.print(":");
+    Serial.print(out_left);
+    Serial.print(",");
+    Serial.println(out_right);
+    
+    analogWrite(MOTOR_LEFT, out_left);
+    analogWrite(MOTOR_RIGHT, out_right);
     delay(change_millisec*10);
   }
   now_vr = vr;

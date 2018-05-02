@@ -39,7 +39,7 @@ void sendBLE() {
   String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
 
-  Serial.println(machineState);
+//  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
@@ -79,8 +79,8 @@ void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic charac
 
 void operateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
   Serial.print("operateCharacteristic event, written : ");
-  operate = operateChara.value();
-  Serial.println(operate);
+  new_operate = operateChara.value();
+  Serial.println(new_operate);
 
   if(mode == MODE_MANUAL) {
     manualOperate();

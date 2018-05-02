@@ -8,11 +8,12 @@
 //#define PROCESSING
 
 unsigned int operate = OPERATE_STOP;
+unsigned int new_operate = OPERATE_STOP;
 unsigned int state = STATE_STOP;
 unsigned int mode = MODE_MANUAL;
 
-const int adjustSpeed = 10;
-const int angleRange = 1;
+const int adjustSpeed = 50;
+const int angleRange = 5;
 const int base = 30;
 
 unsigned int now_vr = 0, now_vl = 0;
@@ -51,72 +52,100 @@ void loop() {
 }
 
 void autoRun() {
-  decideDirection();
+  if(new_operate != operate) {
+    operate = new_operate;
+    decideDirection();
+  }
   decideSpeed();
-  if(leftSpeed < 150) leftSpeed = 150;
-  if(rightSpeed < 150) rightSpeed = 150;
-  changeSpeed(0, leftSpeed, rightSpeed);
+  if(leftSpeed < 150) leftSpeed = 100;
+  if(rightSpeed < 150) rightSpeed = 100;
+  changeSpeed(1, leftSpeed, rightSpeed);
 }
 
 void decideDirection() {
   switch(operate) {
     case OPERATE_FORWARD:
-      controlAngle = angle_yaw;
+      targetAngle = angle_yaw;
       runForward();
       state = STATE_FORWARD;
       break;
     case OPERATE_BACKWARD:
-      controlAngle = angle_yaw;
+      targetAngle = angle_yaw;
       runBackward();
       state = STATE_BACKWARD;
       break;
     case OPERATE_LEFTTURN:
-      controlAngle = angle_yaw + 90;
+      targetAngle = angle_yaw + 90;
       leftTurn();
       state = STATE_LEFTTURN;
       break;
     case OPERATE_RIGHTTURN:
-      controlAngle = angle_yaw - 90;
+      targetAngle = angle_yaw - 90;
       rightTurn();
       state = STATE_RIGHTTURN;
       break;
     default:
-      controlAngle = angle_yaw;
+      targetAngle = angle_yaw;
       state = STATE_STOP;
       break;
   }  
 }
 
 void decideSpeed() {
-  if(controlAngle < angleRange) {
-     if(state == OPERATE_STOP) {
-       leftTurn();
-     }
-     else {
-       leftSpeed = setLeftSpeed + adjustSpeed;
-       rightSpeed = setRightSpeed - adjustSpeed;
-     }
-     isAdjusted = false;
-  }
-  else if(controlAngle > -angleRange) {
-     if(state == OPERATE_STOP) {
-       rightTurn();
-     }
-     else {
-       leftSpeed = setLeftSpeed - adjustSpeed;
-       rightSpeed = setRightSpeed + adjustSpeed;
-     }
-     isAdjusted = false;
-  }
-  else {
-     if(state == OPERATE_STOP) {
-       Stop();
-     }
-     else {
-       leftSpeed = setLeftSpeed;
-       rightSpeed = setRightSpeed;
-     }
-     isAdjusted = true;
+  switch(operate) {
+    case OPERATE_STOP:
+      if(angle_yaw < targetAngle - angleRange) {
+        if(state != STATE_LEFTTURN) {
+          leftTurn();
+          state = STATE_LEFTTURN;
+        }
+      }
+      else if(angle_yaw > targetAngle + angleRange) {
+        if(state != STATE_RIGHTTURN) {
+          rightTurn();
+          state = STATE_RIGHTTURN;
+        }
+      }
+      else {
+        if(state != STATE_STOP) {
+          Stop();
+          state = STATE_STOP;
+        }
+      }
+      break;
+    case OPERATE_FORWARD:
+      if(angle_yaw < targetAngle - angleRange) {
+        leftSpeed = setLeftSpeed + adjustSpeed;
+        rightSpeed = setRightSpeed - adjustSpeed;
+      }
+      else if(angle_yaw > targetAngle + angleRange) {
+        leftSpeed = setLeftSpeed - adjustSpeed;
+        rightSpeed = setRightSpeed + adjustSpeed;
+      }
+      else {
+        leftSpeed = setLeftSpeed;
+        rightSpeed = setRightSpeed;
+      }
+      break;
+    case OPERATE_BACKWARD:
+      if(angle_yaw < targetAngle - angleRange) {
+        leftSpeed = setLeftSpeed - adjustSpeed;
+        rightSpeed = setRightSpeed + adjustSpeed;
+      }
+      else if(angle_yaw > targetAngle + angleRange) {
+        leftSpeed = setLeftSpeed + adjustSpeed;
+        rightSpeed = setRightSpeed - adjustSpeed;
+      }
+      else {
+        leftSpeed = setLeftSpeed;
+        rightSpeed = setRightSpeed;
+      }
+      break;
+    case OPERATE_LEFTTURN:
+    case OPERATE_RIGHTTURN:
+        leftSpeed = setLeftSpeed;
+        rightSpeed = setRightSpeed;
+      break;
   }
 }
 

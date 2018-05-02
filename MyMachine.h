@@ -36,6 +36,6 @@ float angle_roll = 0;
 float angle_pitch = 0;
 float angle_yaw = 0;
 
-int controlAngle;
+int targetAngle;
 int prevTime = 0, nowTime = 0;
 float dt = 0.0;
