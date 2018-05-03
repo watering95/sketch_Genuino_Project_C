@@ -13,7 +13,7 @@ unsigned int state = STATE_STOP;
 unsigned int mode = MODE_MANUAL;
 
 const int adjustSpeed = 50;
-const int angleRange = 5;
+const int angleRange = 10;
 const int base = 30;
 
 unsigned int now_vr = 0, now_vl = 0;
@@ -57,9 +57,14 @@ void autoRun() {
     decideDirection();
   }
   decideSpeed();
-  if(leftSpeed < 150) leftSpeed = 100;
-  if(rightSpeed < 150) rightSpeed = 100;
-  changeSpeed(1, leftSpeed, rightSpeed);
+  if(leftSpeed < 20) leftSpeed = 20;
+  if(rightSpeed < 20) rightSpeed = 20;
+  changeSpeed(3, leftSpeed, rightSpeed);
+  if(operate == OPERATE_STOP || operate == OPERATE_LEFTTURN || operate == OPERATE_RIGHTTURN) {
+    delay(5);
+    Stop();
+    delay(200);
+  }
 }
 
 void decideDirection() {
@@ -92,15 +97,18 @@ void decideDirection() {
 }
 
 void decideSpeed() {
+  float left_limit = angle360(targetAngle + angleRange);
+  float right_limit = angle360(targetAngle - angleRange);
+
   switch(operate) {
     case OPERATE_STOP:
-      if(angle_yaw < targetAngle - angleRange) {
-        if(state != STATE_LEFTTURN) {
-          leftTurn();
-          state = STATE_LEFTTURN;
+      if(angle_yaw > left_limit) {
+        if(state != STATE_RIGHTTURN) {
+          rightTurn();
+          state = STATE_RIGHTTURN;
         }
       }
-      else if(angle_yaw > targetAngle + angleRange) {
+      else if(angle_yaw > right_limit) {
         if(state != STATE_RIGHTTURN) {
           rightTurn();
           state = STATE_RIGHTTURN;
@@ -114,11 +122,11 @@ void decideSpeed() {
       }
       break;
     case OPERATE_FORWARD:
-      if(angle_yaw < targetAngle - angleRange) {
+      if(angle_yaw < left_limit) {
         leftSpeed = setLeftSpeed + adjustSpeed;
         rightSpeed = setRightSpeed - adjustSpeed;
       }
-      else if(angle_yaw > targetAngle + angleRange) {
+      else if(angle_yaw > right_limit) {
         leftSpeed = setLeftSpeed - adjustSpeed;
         rightSpeed = setRightSpeed + adjustSpeed;
       }
@@ -128,11 +136,11 @@ void decideSpeed() {
       }
       break;
     case OPERATE_BACKWARD:
-      if(angle_yaw < targetAngle - angleRange) {
+      if(angle_yaw < left_limit) {
         leftSpeed = setLeftSpeed - adjustSpeed;
         rightSpeed = setRightSpeed + adjustSpeed;
       }
-      else if(angle_yaw > targetAngle + angleRange) {
+      else if(angle_yaw > right_limit) {
         leftSpeed = setLeftSpeed + adjustSpeed;
         rightSpeed = setRightSpeed - adjustSpeed;
       }
@@ -142,9 +150,26 @@ void decideSpeed() {
       }
       break;
     case OPERATE_LEFTTURN:
-    case OPERATE_RIGHTTURN:
+      if(angle_yaw > left_limit) {
+        Stop();
+        state = STATE_STOP;
+        new_operate = OPERATE_STOP;
+      }
+      else {
         leftSpeed = setLeftSpeed;
         rightSpeed = setRightSpeed;
+      }
+      break;
+    case OPERATE_RIGHTTURN:
+      if(angle_yaw < right_limit) {
+        Stop();
+        state = STATE_STOP;
+          new_operate = OPERATE_STOP;
+      }
+      else {
+        leftSpeed = setLeftSpeed;
+        rightSpeed = setRightSpeed;
+      }
       break;
   }
 }
