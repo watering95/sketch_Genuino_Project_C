@@ -32,11 +32,12 @@ void initBLE() {
 void sendBLE() {
   if(!isConnectedCentral) return;
   
+  String strMode = String(mode);
   String strState = String(state);
   String strAngleX = String(filtered_angle_roll, 1);
   String strAngleY = String(filtered_angle_pitch, 1);
   String strAngleZ = String(filtered_angle_yaw, 1);
-  String sendData = String(strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
+  String sendData = String(strMode + "," + strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
 
 //  Serial.println(machineState);
@@ -60,8 +61,8 @@ void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic charact
   setLeftSpeed = speedLeftChara.value();
   Serial.println(setLeftSpeed);
 
-  if(setLeftSpeed < 150) setLeftSpeed = 150;
-  if(now_vr < 150) now_vr = 150;
+  if(setLeftSpeed < minimumSpeed) setLeftSpeed = minimumSpeed;
+  if(now_vr < minimumSpeed) now_vr = minimumSpeed;
 
   changeSpeed(10, setLeftSpeed, now_vr);
 }
@@ -71,8 +72,8 @@ void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic charac
   setRightSpeed = speedRightChara.value();
   Serial.println(setRightSpeed);
 
-  if(setRightSpeed < 150) setRightSpeed = 150;
-  if(now_vl < 150) now_vl = 150;
+  if(setRightSpeed < minimumSpeed) setRightSpeed = minimumSpeed;
+  if(now_vl < minimumSpeed) now_vl = minimumSpeed;
 
   changeSpeed(10, now_vl, setRightSpeed);
 }

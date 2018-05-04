@@ -24,7 +24,7 @@ void initMotorShield() {
 void changeSpeed(int change_millisec, unsigned int vl, unsigned int vr) {
   unsigned int change_vr = vr - now_vr;
   unsigned int change_vl = vl - now_vl;
-  unsigned int out_left, out_right;
+  unsigned int out_left = 0, out_right = 0;
   
   for(int i = 1, limit = change_millisec + 1; i < limit; i++) {
     out_left = now_vl + (change_vl * i) / limit;
@@ -42,8 +42,8 @@ void changeSpeed(int change_millisec, unsigned int vl, unsigned int vr) {
     analogWrite(MOTOR_RIGHT, out_right);
     delay(change_millisec*10);
   }
-  now_vr = vr;
-  now_vl = vl;
+  now_vr = out_right;
+  now_vl = out_left;
 }
 
 void changeDirection(byte d) {
@@ -117,6 +117,9 @@ void Stop() {
 #endif
   Serial.print("Motor Stop : ");
   Serial.println(dir);
+
+  now_vr = 0;
+  now_vl = 0;
 }
 
 void runForward() {

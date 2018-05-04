@@ -21,7 +21,7 @@ unsigned int setRightSpeed = 0;
 boolean isConnectedCentral = false;
 boolean isAdjusted = false;
 
-const int timeBLE = 1000000;
+const int timeBLE = 2000000;
 const int timeIMU = 500; //ms
 
 int gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0; //RAW값
