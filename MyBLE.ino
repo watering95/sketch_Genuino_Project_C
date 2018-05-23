@@ -34,10 +34,10 @@ void sendBLE() {
   
   String strMode = String(mode);
   String strState = String(state);
-  String strAngleX = String(filtered_angle_roll, 1);
-  String strAngleY = String(filtered_angle_pitch, 1);
-  String strAngleZ = String(filtered_angle_yaw, 1);
-  String sendData = String(strMode + "," + strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
+  String strAngleTarget = String(targetAngle, 1);
+  String strAngleYaw = String(filtered_angle_yaw, 1);
+  String strOutput = String(output, 1);
+  String sendData = String(strMode + "," + strState + "," + strAngleTarget + "," + strAngleYaw + ","+ strOutput + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
 
 //  Serial.println(machineState);

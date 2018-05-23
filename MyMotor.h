@@ -27,6 +27,8 @@ void runForward();
 void rightTurn();
 void leftTurn();
 void Stop();
+void leftMotor(unsigned int);
+void rightMotor(unsigned int);
 
 #ifndef SHIELD_V2
 void changeDirection(byte);

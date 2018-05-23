@@ -22,8 +22,8 @@ void initMotorShield() {
 }
 
 void changeSpeed(int change_millisec, unsigned int vl, unsigned int vr) {
-  unsigned int change_vr = vr - now_vr;
-  unsigned int change_vl = vl - now_vl;
+  int change_vr = vr - now_vr;
+  int change_vl = vl - now_vl;
   unsigned int out_left = 0, out_right = 0;
   
   for(int i = 1, limit = change_millisec + 1; i < limit; i++) {
@@ -178,3 +178,12 @@ void rightTurn() {
   Serial.print("Motor Right : ");
   Serial.println(dir);
 }
+
+void leftMotor(unsigned int motorspeed) {
+  
+}
+
+void rightMotor(unsigned int motorspeed) {
+  
+}
+
