@@ -37,7 +37,6 @@ void readIMU() {
   gyro_z = (gz - base_gz) / GYROXYZ_TO_DEGREES_PER_SEC - 1;
   gyro_angle_yaw = 0 - gyro_z * dt_imu / 1000.0;
   filtered_angle_yaw += gyro_angle_yaw;
-  angle360(filtered_angle_yaw);
 }
 
 void angle360(float& angle) {

@@ -18,6 +18,9 @@ int rightSpeed = 0;
 int setLeftSpeed = 0;
 int setRightSpeed = 0;
 
+const int minimumSpeed = 150;
+const int maxSpeed = 250;
+
 boolean isConnectedCentral = false;
 boolean isAdjusted = false;
 
@@ -35,7 +38,7 @@ float angle_yaw = 0;
 float targetAngle;
 
 float prev_angle_yaw = 0.0, iterm, output;
-float kp = 3.0, ki = 0.0, kd = 1.0;
+int kp = 3, ki = 0, kd = 1;
 
 int prevPIDTime = 0, prevIMUTime = 0, nowTime = 0;
 float dt_imu = 0.0;

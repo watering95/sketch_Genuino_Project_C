@@ -10,20 +10,23 @@ void initBLE() {
   
   BLE.setAdvertisedService(motorService);
   motorService.addCharacteristic(operateChara);
-  motorService.addCharacteristic(speedLeftChara);
-  motorService.addCharacteristic(speedRightChara);
-  motorService.addCharacteristic(modeChara);
+  motorService.addCharacteristic(speedChara);
+
+  BLE.setAdvertisedService(operateService);
+  operateService.addCharacteristic(modeChara);
+  operateService.addCharacteristic(pidGainChara);
 
   BLE.addService(machineService);
   BLE.addService(motorService);
+  BLE.addService(operateService);
   
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
 
   operateChara.setEventHandler(BLEWritten, operateCharacteristicWritten);
-  speedLeftChara.setEventHandler(BLEWritten, speedLeftCharacteristicWritten);
-  speedRightChara.setEventHandler(BLEWritten, speedRightCharacteristicWritten);
+  speedChara.setEventHandler(BLEWritten, speedCharacteristicWritten);
   modeChara.setEventHandler(BLEWritten, modeCharacteristicWritten);
+  pidGainChara.setEventHandler(BLEWritten, pidGainCharacteristicWritten);
   
   BLE.advertise();
   Serial.println("BLE Genuino101 Peripheral");
@@ -56,31 +59,32 @@ void blePeripheralDisconnectHandler(BLEDevice central) {
   isConnectedCentral = false;
 }
 
-void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("speedLeftCharacteristic event, written : ");
-  setLeftSpeed = speedLeftChara.value();
-  Serial.println(setLeftSpeed);
+void speedCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  const byte* byteBuffer = (const byte* )malloc(10);
+  byteBuffer = speedChara.value();
+  
+  String strBuffer = String((char *)byteBuffer);
 
-  if(setLeftSpeed < minimumSpeed) setLeftSpeed = minimumSpeed;
-  if(now_vr < minimumSpeed) now_vr = minimumSpeed;
+  Serial.println(strBuffer);
+  
+  setLeftSpeed = strBuffer.substring(0,3).toInt();
+  setRightSpeed = strBuffer.substring(5,7).toInt();
 
-  changeSpeed(10, setLeftSpeed, now_vr);
-}
+  setLeftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0);
+  setRightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0);
 
-void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("speedRightCharacteristic event, written : ");
-  setRightSpeed = speedRightChara.value();
+  Serial.print("speedCharacteristic event, written : ");
+  Serial.print(setLeftSpeed);
+  Serial.print(",");
   Serial.println(setRightSpeed);
-
-  if(setRightSpeed < minimumSpeed) setRightSpeed = minimumSpeed;
-  if(now_vl < minimumSpeed) now_vl = minimumSpeed;
-
-  changeSpeed(10, now_vl, setRightSpeed);
+  
+  changeSpeed(10, setLeftSpeed, setRightSpeed);
 }
 
 void operateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("operateCharacteristic event, written : ");
   new_operate = operateChara.value();
+  
+  Serial.print("operateCharacteristic event, written : ");
   Serial.println(new_operate);
 
   if(mode == MODE_MANUAL) {
@@ -90,12 +94,30 @@ void operateCharacteristicWritten(BLEDevice central, BLECharacteristic character
 }
 
 void modeCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("modeCharacteristic event, written : ");
   if(modeChara.value() == MODE_AUTO) mode = MODE_AUTO;
   else {
     mode = MODE_MANUAL;
     Stop();
   }
   initIMU();
+  
+  Serial.print("modeCharacteristic event, written : ");
   Serial.println(mode);
+}
+
+void pidGainCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  const byte* byteBuffer = (const byte* )malloc(20);
+  byteBuffer = pidGainChara.value();
+  
+  String strBuffer = String((char *)byteBuffer);
+  kp = strBuffer.substring(0,3).toInt();
+  ki = strBuffer.substring(5,7).toInt();
+  kd = strBuffer.substring(9,11).toInt();
+  
+  Serial.print("pidGainCharacteristic event, written : ");
+  Serial.print(kp);
+  Serial.print(",");
+  Serial.print(ki);
+  Serial.print(",");
+  Serial.print(kd);
 }

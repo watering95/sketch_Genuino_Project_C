@@ -179,11 +179,3 @@ void rightTurn() {
   Serial.println(dir);
 }
 
-void leftMotor(unsigned int motorspeed) {
-  
-}
-
-void rightMotor(unsigned int motorspeed) {
-  
-}
-

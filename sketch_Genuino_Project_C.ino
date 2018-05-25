@@ -13,7 +13,6 @@ unsigned int state = STATE_STOP;
 unsigned int mode = MODE_MANUAL;
 
 const int base = 30;
-const int minimumSpeed = 140;
 
 unsigned int now_vr = 0, now_vl = 0;
 
@@ -112,7 +111,7 @@ void decideDirection() {
   }  
 }
 
-void stdPID(float& setpoint, float& input, float& prev_input, float& kp, float& ki, float& kd, float& iterm, float& output) {
+void stdPID(float& setpoint, float& input, float& prev_input, int& kp, int& ki, int& kd, float& iterm, float& output) {
   float error;
   float dInput;
   float pterm, dterm;
@@ -128,10 +127,10 @@ void stdPID(float& setpoint, float& input, float& prev_input, float& kp, float& 
   output = pterm + iterm + dterm;
 
   if(output < 0) {
-    output = 0.5 * output - 150;
+    output = 0.1 * output - 150;
   }
   else {
-    output = 0.5 * output + 150;
+    output = 0.1 * output + 150;
   }
 
   if(output > 250) output = 250;
