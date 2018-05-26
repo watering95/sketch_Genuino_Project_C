@@ -1,5 +1,3 @@
-#include "MyBLE.h"
-
 void initBLE() {
   BLE.begin();
   
@@ -43,7 +41,6 @@ void sendBLE() {
   String sendData = String(strMode + "," + strState + "," + strAngleTarget + "," + strAngleYaw + ","+ strOutput + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
 
-//  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
@@ -65,20 +62,18 @@ void speedCharacteristicWritten(BLEDevice central, BLECharacteristic characteris
   
   String strBuffer = String((char *)byteBuffer);
 
+  Serial.print("speedCharacteristic event, written : ");
   Serial.println(strBuffer);
-  
+
   setLeftSpeed = strBuffer.substring(0,3).toInt();
   setRightSpeed = strBuffer.substring(5,7).toInt();
 
-  setLeftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0);
-  setRightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0);
+  if(mode == MODE_MANUAL) {
+    int leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0);
+    int rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0);
 
-  Serial.print("speedCharacteristic event, written : ");
-  Serial.print(setLeftSpeed);
-  Serial.print(",");
-  Serial.println(setRightSpeed);
-  
-  changeSpeed(10, setLeftSpeed, setRightSpeed);
+    changeSpeed(leftSpeed, rightSpeed);
+  }
 }
 
 void operateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
@@ -88,8 +83,11 @@ void operateCharacteristicWritten(BLEDevice central, BLECharacteristic character
   Serial.println(new_operate);
 
   if(mode == MODE_MANUAL) {
+    int leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0);
+    int rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0);
+    
     manualOperate();
-    changeSpeed(10, setLeftSpeed, setRightSpeed);
+    changeSpeed(leftSpeed, rightSpeed);
   }
 }
 
@@ -98,11 +96,9 @@ void modeCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
   else {
     mode = MODE_MANUAL;
     Stop();
+    state = STATE_STOP;
   }
   initIMU();
-  
-  Serial.print("modeCharacteristic event, written : ");
-  Serial.println(mode);
 }
 
 void pidGainCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
@@ -113,11 +109,4 @@ void pidGainCharacteristicWritten(BLEDevice central, BLECharacteristic character
   kp = strBuffer.substring(0,3).toInt();
   ki = strBuffer.substring(5,7).toInt();
   kd = strBuffer.substring(9,11).toInt();
-  
-  Serial.print("pidGainCharacteristic event, written : ");
-  Serial.print(kp);
-  Serial.print(",");
-  Serial.print(ki);
-  Serial.print(",");
-  Serial.print(kd);
 }

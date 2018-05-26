@@ -1,5 +1,3 @@
-#include "MyIMU.h"
-
 void initIMU() {
   float tmp_yaw = 0;
   int tmp_gz = 0;
@@ -34,13 +32,8 @@ void readIMU() {
   
   CurieIMU.readGyro(gx, gy, gz);
 
-  gyro_z = (gz - base_gz) / GYROXYZ_TO_DEGREES_PER_SEC - 1;
+  gyro_z = (gz - base_gz) / GYROXYZ_TO_DEGREES_PER_SEC;
   gyro_angle_yaw = 0 - gyro_z * dt_imu / 1000.0;
   filtered_angle_yaw += gyro_angle_yaw;
-}
-
-void angle360(float& angle) {
-  if(angle < 0) angle += 360;
-  else if(angle > 360) angle -= 360;
 }
 

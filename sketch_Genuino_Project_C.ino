@@ -1,8 +1,4 @@
-#include "CurieBLE.h"
-#include "CurieTimerOne.h"
 #include "./MyMachine.h"
-#include "./MyMotor.h"
-#include "./MyIMU.h"
 
 #define SHIELD_V1
 //#define PROCESSING
@@ -11,10 +7,6 @@ unsigned int operate = OPERATE_STOP;
 unsigned int new_operate = OPERATE_STOP;
 unsigned int state = STATE_STOP;
 unsigned int mode = MODE_MANUAL;
-
-const int base = 30;
-
-unsigned int now_vr = 0, now_vl = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -59,9 +51,21 @@ void autoRun() {
   
   stdPID(targetAngle, angle_yaw, prev_angle_yaw, kp, ki, kd, iterm, output);
 
-  leftSpeed = setLeftSpeed - (int)output;
-  rightSpeed = setRightSpeed + (int)output;
-
+  int leftSpeed, rightSpeed;
+  
+  if(operate == OPERATE_FORWARD) {
+    leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0) + (int)output;
+    rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0) - (int)output;
+  }
+  else if(operate == OPERATE_BACKWARD) {
+    leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 200.0) - (int)output;
+    rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 200.0) + (int)output;
+  }
+  else {
+    leftSpeed = 0 -(int)output;
+    rightSpeed = 0 + (int)output;
+  }
+  
   if(leftSpeed < 0 && rightSpeed > 0) {
     leftTurn();
   }
@@ -76,7 +80,7 @@ void autoRun() {
       runBackward();
     }
   }
-  changeSpeed(2, abs(leftSpeed), abs(rightSpeed));
+  changeSpeed(abs(leftSpeed), abs(rightSpeed));
 }
 
 void decideDirection() {
@@ -90,21 +94,15 @@ void decideDirection() {
       state = STATE_BACKWARD;
       break;
     case OPERATE_LEFTTURN:
-      setLeftSpeed = 0;
-      setRightSpeed = 0;
       targetAngle = angle_yaw + 90;
       state = STATE_LEFTTURN;
       break;
     case OPERATE_RIGHTTURN:
-      setLeftSpeed = 0;
-      setRightSpeed = 0;
       targetAngle = angle_yaw - 90;
       state = STATE_RIGHTTURN;
       break;
     case OPERATE_STOP:
     default:
-      setLeftSpeed = 0;
-      setRightSpeed = 0;
       targetAngle = angle_yaw;
       state = STATE_STOP;
       break;

@@ -1,3 +1,5 @@
+#include "CurieBLE.h"
+
 BLEService machineService("BBB0");
 BLECharacteristic machineStateChara("BBB1", BLERead | BLENotify, 30);
 
