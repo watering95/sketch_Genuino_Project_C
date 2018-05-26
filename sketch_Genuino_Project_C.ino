@@ -1,8 +1,4 @@
-#include "CurieBLE.h"
-#include "CurieTimerOne.h"
 #include "./MyMachine.h"
-#include "./MyMotor.h"
-#include "./MyIMU.h"
 
 #define SHIELD_V1
 //#define PROCESSING
@@ -12,18 +8,12 @@ unsigned int new_operate = OPERATE_STOP;
 unsigned int state = STATE_STOP;
 unsigned int mode = MODE_MANUAL;
 
-const int adjustSpeed = 50;
-const int angleRange = 10;
-const int base = 30;
-const int minimumSpeed = 140;
-
-unsigned int now_vr = 0, now_vl = 0;
-
 void setup() {
   Serial.begin(9600);
   initBLE();
   initMotorShield();
-  prevTime = millis();
+  prevPIDTime = millis();
+  prevIMUTime = millis();
   initIMU();
   
   CurieTimerOne.start(timeBLE, &sendBLE); 
@@ -35,21 +25,18 @@ void loop() {
   BLE.poll();
 
   nowTime = millis();
-  dt = nowTime - prevTime;
-  if(dt > timeIMU) {
-    readIMU();
-
-    angle_yaw = filtered_angle_yaw - base_yaw;
-    angle_pitch = filtered_angle_pitch - base_pitch;
-    angle_roll = filtered_angle_roll - base_roll;
-
-    prevTime = nowTime;
-  }
-  if(mode == MODE_AUTO) autoRun();
+  dt_imu = nowTime - prevIMUTime;
+  dt_pid = nowTime - prevPIDTime;
   
-#ifdef PROCESSING  
-  sendToProcessing();
-#endif
+  if(dt_imu > timeIMU) {
+    readIMU();
+    angle_yaw = filtered_angle_yaw - base_yaw;
+    prevIMUTime = nowTime;
+  }
+  if(dt_pid > timePID) {
+    if(mode == MODE_AUTO) autoRun();   
+    prevPIDTime = nowTime; 
+  }
 }
 
 void autoRun() {
@@ -57,138 +44,94 @@ void autoRun() {
     Stop();
     state = STATE_STOP;
     operate = new_operate;
+    output = 0;
+    iterm = 0;
     decideDirection();
   }
-  decideSpeed();
-  if(state != STATE_STOP) {
-    if(leftSpeed < minimumSpeed) leftSpeed = minimumSpeed;
-    if(rightSpeed < minimumSpeed) rightSpeed = minimumSpeed;
-    changeSpeed(3, leftSpeed, rightSpeed);
-    if(operate == OPERATE_STOP || operate == OPERATE_LEFTTURN || operate == OPERATE_RIGHTTURN) {
-      delay(5);
-      Stop();
-      state = STATE_STOP;
-      delay(200);
-    }
+  
+  stdPID(targetAngle, angle_yaw, prev_angle_yaw, kp, ki, kd, iterm, output);
+
+  int leftSpeed, rightSpeed;
+  
+  if(operate == OPERATE_FORWARD) {
+    leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0) + (int)output;
+    rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0) - (int)output;
+  }
+  else if(operate == OPERATE_BACKWARD) {
+    leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 200.0) - (int)output;
+    rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 200.0) + (int)output;
   }
   else {
-    leftSpeed = 0;
-    rightSpeed = 0;
+    leftSpeed = 0 -(int)output;
+    rightSpeed = 0 + (int)output;
   }
+  
+  if(leftSpeed < 0 && rightSpeed > 0) {
+    leftTurn();
+  }
+  else if(leftSpeed > 0 && rightSpeed < 0) {
+    rightTurn();
+  }
+  else if(leftSpeed > 0 && rightSpeed > 0) {
+    if(operate == OPERATE_FORWARD) {
+      runForward();
+    }
+    else if(operate == OPERATE_BACKWARD) {
+      runBackward();
+    }
+  }
+  changeSpeed(abs(leftSpeed), abs(rightSpeed));
 }
 
 void decideDirection() {
   switch(operate) {
     case OPERATE_FORWARD:
       targetAngle = angle_yaw;
-      runForward();
       state = STATE_FORWARD;
       break;
     case OPERATE_BACKWARD:
       targetAngle = angle_yaw;
-      runBackward();
       state = STATE_BACKWARD;
       break;
     case OPERATE_LEFTTURN:
       targetAngle = angle_yaw + 90;
-      leftTurn();
       state = STATE_LEFTTURN;
       break;
     case OPERATE_RIGHTTURN:
       targetAngle = angle_yaw - 90;
-      rightTurn();
       state = STATE_RIGHTTURN;
       break;
+    case OPERATE_STOP:
     default:
       targetAngle = angle_yaw;
       state = STATE_STOP;
       break;
   }  
-  targetAngle = angle360(targetAngle);
 }
 
-void decideSpeed() {
-  float left_limit = angle360(targetAngle + angleRange);
-  float right_limit = angle360(targetAngle - angleRange);
+void stdPID(float& setpoint, float& input, float& prev_input, int& kp, int& ki, int& kd, float& iterm, float& output) {
+  float error;
+  float dInput;
+  float pterm, dterm;
 
-  if(left_limit < right_limit) {
-    right_limit -= 360;
-    if(angle_yaw > 360 - angleRange * 2) {
-      angle_yaw -= 360;
-    }
+  error = setpoint - input;
+  dInput = input - prev_input;
+  prev_input = input;
+
+  pterm = kp * error;
+  iterm += ki * error * dt_pid;
+  dterm = -kd * dInput / dt_pid;
+
+  output = pterm + iterm + dterm;
+
+  if(output < 0) {
+    output = 0.1 * output - 150;
+  }
+  else {
+    output = 0.1 * output + 150;
   }
 
-  switch(operate) {
-    case OPERATE_STOP:
-      if(angle_yaw > left_limit && angle_yaw < targetAngle + 180) {
-        if(state != STATE_RIGHTTURN) {
-          rightTurn();
-          state = STATE_RIGHTTURN;
-        }
-      }
-      else if(angle_yaw < right_limit && angle_yaw > targetAngle + 180) {
-        if(state != STATE_RIGHTTURN) {
-          leftTurn();
-          state = STATE_RIGHTTURN;
-        }
-      }
-      else {
-        if(state != STATE_STOP) {
-          Stop();
-          state = STATE_STOP;
-        }
-      }
-      break;
-    case OPERATE_FORWARD:
-      if(angle_yaw > left_limit && angle_yaw < targetAngle + 180) {
-        leftSpeed = setLeftSpeed + adjustSpeed;
-        rightSpeed = setRightSpeed - adjustSpeed;
-      }
-      else if(angle_yaw < right_limit && angle_yaw > targetAngle + 180) {
-        leftSpeed = setLeftSpeed - adjustSpeed;
-        rightSpeed = setRightSpeed + adjustSpeed;
-      }
-      else {
-        leftSpeed = setLeftSpeed;
-        rightSpeed = setRightSpeed;
-      }
-      break;
-    case OPERATE_BACKWARD:
-      if(angle_yaw > left_limit && angle_yaw < targetAngle + 180) {
-        leftSpeed = setLeftSpeed - adjustSpeed;
-        rightSpeed = setRightSpeed + adjustSpeed;
-      }
-      else if(angle_yaw < right_limit && angle_yaw > targetAngle + 180) {
-        leftSpeed = setLeftSpeed + adjustSpeed;
-        rightSpeed = setRightSpeed - adjustSpeed;
-      }
-      else {
-        leftSpeed = setLeftSpeed;
-        rightSpeed = setRightSpeed;
-      }
-      break;
-    case OPERATE_LEFTTURN:
-      if(angle_yaw > left_limit) {
-        Stop();
-        state = STATE_STOP;
-        new_operate = OPERATE_STOP;
-      }
-      else {
-        leftSpeed = setLeftSpeed;
-        rightSpeed = setRightSpeed;
-      }
-      break;
-    case OPERATE_RIGHTTURN:
-      if(angle_yaw < right_limit) {
-        Stop();
-        state = STATE_STOP;
-        new_operate = OPERATE_STOP;
-      }
-      else {
-        leftSpeed = setLeftSpeed;
-        rightSpeed = setRightSpeed;
-      }
-      break;
-  }
+  if(output > 250) output = 250;
+  else if(output < -250) output = -250;
 }
 

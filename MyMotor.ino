@@ -1,4 +1,4 @@
-#include "MyMotor.h"
+#include "./MyMotor.h"
 
 void initMotorShield() {
 #ifdef SHIELD_V1
@@ -21,39 +21,16 @@ void initMotorShield() {
 #endif
 }
 
-void changeSpeed(int change_millisec, unsigned int vl, unsigned int vr) {
-  unsigned int change_vr = vr - now_vr;
-  unsigned int change_vl = vl - now_vl;
-  unsigned int out_left = 0, out_right = 0;
-  
-  for(int i = 1, limit = change_millisec + 1; i < limit; i++) {
-    out_left = now_vl + (change_vl * i) / limit;
-    out_right = now_vr + (change_vr * i) / limit;
-    
-    Serial.print(i);
-    Serial.print(",");
-    Serial.print(limit);
-    Serial.print(":");
-    Serial.print(out_left);
-    Serial.print(",");
-    Serial.println(out_right);
-    
-    analogWrite(MOTOR_LEFT, out_left);
-    analogWrite(MOTOR_RIGHT, out_right);
-    delay(change_millisec*10);
-  }
-  now_vr = out_right;
-  now_vl = out_left;
+void changeSpeed(unsigned int vl, unsigned int vr) { 
+  analogWrite(MOTOR_LEFT, vl);
+  analogWrite(MOTOR_RIGHT, vr);
 }
 
 void changeDirection(byte d) {
   digitalWrite(PIN_LATCH, LOW);
-  Serial.println("Shift Register Latch Low");
   shiftOut(PIN_DATA, PIN_CLOCK, LSBFIRST, d);
-  Serial.println(d);
   digitalWrite(PIN_LATCH, HIGH);
-  Serial.println("Shift Register Latch High (Hold)");
-  delay(500);
+  delay(10);
 }
 
 void manualOperate() {
@@ -97,8 +74,6 @@ void runBackward() {
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
 #endif
-  Serial.print("Motor Back : ");
-  Serial.println(dir);
 }
 
 void Stop() {
@@ -106,20 +81,10 @@ void Stop() {
   motor1->run(RELEASE);
   motor2->run(RELEASE);
 #else
-#ifdef SHIELD_V1
-  byte dir = 0x06;  //  0 0 0 0 0 1 1 0, M3 FWD, M4 FWD
-#else
-  byte dir = 0x0A;  //  0 0 0 0 0 1 0 1
-#endif
   digitalWrite(LED_BUILTIN, LOW);  
   analogWrite(MOTOR_RIGHT, 0);
   analogWrite(MOTOR_LEFT, 0);
 #endif
-  Serial.print("Motor Stop : ");
-  Serial.println(dir);
-
-  now_vr = 0;
-  now_vl = 0;
 }
 
 void runForward() {
@@ -137,8 +102,6 @@ void runForward() {
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
 #endif
-  Serial.print("Motor Run : ");
-  Serial.println(dir);
 }
 
 void leftTurn() {
@@ -156,8 +119,6 @@ void leftTurn() {
   digitalWrite(LED_BUILTIN, HIGH);
   changeDirection(dir);
 #endif
-  Serial.print("Motor Left : ");
-  Serial.println(dir);
 }
 
 void rightTurn() {
@@ -175,6 +136,5 @@ void rightTurn() {
   digitalWrite(LED_BUILTIN, HIGH);  
   changeDirection(dir);
 #endif
-  Serial.print("Motor Right : ");
-  Serial.println(dir);
 }
+

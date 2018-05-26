@@ -21,7 +21,7 @@ Adafruit_DCMotor *motor2 = AFMS.getMotor(4);
 
 void initMotorShield();
 void manualOperate();
-void changeSpeed(int, unsigned int, unsigned int);
+void changeSpeed(unsigned int, unsigned int);
 void runBackward();
 void runForward();
 void rightTurn();

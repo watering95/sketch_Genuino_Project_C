@@ -1,5 +1,3 @@
-#include "MyBLE.h"
-
 void initBLE() {
   BLE.begin();
   
@@ -10,20 +8,23 @@ void initBLE() {
   
   BLE.setAdvertisedService(motorService);
   motorService.addCharacteristic(operateChara);
-  motorService.addCharacteristic(speedLeftChara);
-  motorService.addCharacteristic(speedRightChara);
-  motorService.addCharacteristic(modeChara);
+  motorService.addCharacteristic(speedChara);
+
+  BLE.setAdvertisedService(operateService);
+  operateService.addCharacteristic(modeChara);
+  operateService.addCharacteristic(pidGainChara);
 
   BLE.addService(machineService);
   BLE.addService(motorService);
+  BLE.addService(operateService);
   
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
 
   operateChara.setEventHandler(BLEWritten, operateCharacteristicWritten);
-  speedLeftChara.setEventHandler(BLEWritten, speedLeftCharacteristicWritten);
-  speedRightChara.setEventHandler(BLEWritten, speedRightCharacteristicWritten);
+  speedChara.setEventHandler(BLEWritten, speedCharacteristicWritten);
   modeChara.setEventHandler(BLEWritten, modeCharacteristicWritten);
+  pidGainChara.setEventHandler(BLEWritten, pidGainCharacteristicWritten);
   
   BLE.advertise();
   Serial.println("BLE Genuino101 Peripheral");
@@ -34,13 +35,12 @@ void sendBLE() {
   
   String strMode = String(mode);
   String strState = String(state);
-  String strAngleX = String(filtered_angle_roll, 1);
-  String strAngleY = String(filtered_angle_pitch, 1);
-  String strAngleZ = String(filtered_angle_yaw, 1);
-  String sendData = String(strMode + "," + strState + "," + strAngleX + "," + strAngleY + "," + strAngleZ + ",");
+  String strAngleTarget = String(targetAngle, 1);
+  String strAngleYaw = String(filtered_angle_yaw, 1);
+  String strOutput = String(output, 1);
+  String sendData = String(strMode + "," + strState + "," + strAngleTarget + "," + strAngleYaw + ","+ strOutput + ",");
   sendData.toCharArray(machineState,sendData.length()+1);
 
-//  Serial.println(machineState);
   machineStateChara.setValue(machineState);
 }
 
@@ -56,46 +56,57 @@ void blePeripheralDisconnectHandler(BLEDevice central) {
   isConnectedCentral = false;
 }
 
-void speedLeftCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("speedLeftCharacteristic event, written : ");
-  setLeftSpeed = speedLeftChara.value();
-  Serial.println(setLeftSpeed);
+void speedCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  const byte* byteBuffer = (const byte* )malloc(10);
+  byteBuffer = speedChara.value();
+  
+  String strBuffer = String((char *)byteBuffer);
 
-  if(setLeftSpeed < minimumSpeed) setLeftSpeed = minimumSpeed;
-  if(now_vr < minimumSpeed) now_vr = minimumSpeed;
+  Serial.print("speedCharacteristic event, written : ");
+  Serial.println(strBuffer);
 
-  changeSpeed(10, setLeftSpeed, now_vr);
-}
+  setLeftSpeed = strBuffer.substring(0,3).toInt();
+  setRightSpeed = strBuffer.substring(5,7).toInt();
 
-void speedRightCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("speedRightCharacteristic event, written : ");
-  setRightSpeed = speedRightChara.value();
-  Serial.println(setRightSpeed);
+  if(mode == MODE_MANUAL) {
+    int leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0);
+    int rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0);
 
-  if(setRightSpeed < minimumSpeed) setRightSpeed = minimumSpeed;
-  if(now_vl < minimumSpeed) now_vl = minimumSpeed;
-
-  changeSpeed(10, now_vl, setRightSpeed);
+    changeSpeed(leftSpeed, rightSpeed);
+  }
 }
 
 void operateCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("operateCharacteristic event, written : ");
   new_operate = operateChara.value();
+  
+  Serial.print("operateCharacteristic event, written : ");
   Serial.println(new_operate);
 
   if(mode == MODE_MANUAL) {
+    int leftSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setLeftSpeed / 100.0);
+    int rightSpeed = minimumSpeed + (maxSpeed - minimumSpeed) * (setRightSpeed / 100.0);
+    
     manualOperate();
-    changeSpeed(10, setLeftSpeed, setRightSpeed);
+    changeSpeed(leftSpeed, rightSpeed);
   }
 }
 
 void modeCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
-  Serial.print("modeCharacteristic event, written : ");
   if(modeChara.value() == MODE_AUTO) mode = MODE_AUTO;
   else {
     mode = MODE_MANUAL;
     Stop();
+    state = STATE_STOP;
   }
   initIMU();
-  Serial.println(mode);
+}
+
+void pidGainCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+  const byte* byteBuffer = (const byte* )malloc(20);
+  byteBuffer = pidGainChara.value();
+  
+  String strBuffer = String((char *)byteBuffer);
+  kp = strBuffer.substring(0,3).toInt();
+  ki = strBuffer.substring(5,7).toInt();
+  kd = strBuffer.substring(9,11).toInt();
 }
